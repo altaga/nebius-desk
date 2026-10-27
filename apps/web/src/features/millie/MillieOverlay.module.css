@@ -18,10 +18,11 @@
   pointer-events: auto;
 }
 
-.stack {
+/* Millie + ask stay put; replies grow above without shifting the anchor. */
+.anchor {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: stretch;
   gap: 2px;
 }
 
@@ -109,11 +110,14 @@
 }
 
 .bubble {
-  position: relative;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
   z-index: 2;
-  max-height: 96px;
+  margin: 0 0 6px;
+  max-height: min(160px, 28dvh);
   overflow: auto;
-  margin: 0;
   padding: 8px 10px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--bg) 78%, transparent);

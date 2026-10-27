@@ -5,12 +5,20 @@ import { IconX } from "@/ui/icons";
 import { useDeskGuide } from "./DeskGuideContext";
 import { MillieCanvas, type MillieHandle } from "./MillieCanvas";
 import { MillieLauncher } from "./MillieLauncher";
-import { clampMilliePos, homeMilliePos, writeMillieOpen, type MilliePos } from "./millieStorage";
+import {
+  clampMilliePos,
+  homeMilliePos,
+  readMilliePos,
+  writeMillieOpen,
+  writeMilliePos,
+  type MilliePos,
+} from "./millieStorage";
 import { useMillieGuide } from "./useMillieGuide";
 import styles from "./MillieOverlay.module.css";
 
 const W = 260;
-const H_GUESS = 320;
+/** Anchor only (canvas + ask) — bubble grows above and must not affect this. */
+const H_ANCHOR = 280;
 const EDGE = 8;
 
 type Props = { deviceId: string | null };
@@ -18,9 +26,10 @@ type Props = { deviceId: string | null };
 export function MillieOverlay({ deviceId }: Props) {
   const millieRef = useRef<MillieHandle | null>(null);
   const overlayRef = useRef<HTMLElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(true);
-  const [pos, setPos] = useState<MilliePos>(() => homeMilliePos(W, H_GUESS, EDGE));
-  const [size, setSize] = useState({ w: W, h: H_GUESS });
+  const [pos, setPos] = useState<MilliePos>(() => readMilliePos() ?? homeMilliePos(W, H_ANCHOR, EDGE));
+  const [size, setSize] = useState({ w: W, h: H_ANCHOR });
   const [dragging, setDragging] = useState(false);
   const [ready, setReady] = useState(false);
   const drag = useRef<{ ox: number; oy: number; px: number; py: number } | null>(null);
@@ -29,33 +38,33 @@ export function MillieOverlay({ deviceId }: Props) {
   const [draft, setDraft] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const goHome = useCallback((w = size.w, h = size.h) => {
-    setPos(homeMilliePos(w, h, EDGE));
-  }, [size.h, size.w]);
-
   useEffect(() => {
     writeMillieOpen(true);
     setOpen(true);
-    goHome(W, H_GUESS);
     setReady(true);
-  }, [goHome]);
+  }, []);
 
+  // Size + clamp from the Millie+ask anchor only — reply bubble must not move her.
   useLayoutEffect(() => {
-    if (!open || !overlayRef.current) return;
-    const el = overlayRef.current;
-    const sync = () => {
+    if (!open || !anchorRef.current) return;
+    const el = anchorRef.current;
+    const syncSize = () => {
       const box = el.getBoundingClientRect();
-      const next = { w: Math.ceil(box.width) || W, h: Math.ceil(box.height) || H_GUESS };
+      const next = { w: Math.ceil(box.width) || W, h: Math.ceil(box.height) || H_ANCHOR };
       setSize(next);
-      if (!drag.current) setPos(homeMilliePos(next.w, next.h, EDGE));
+      setPos((p) => {
+        const clamped = clampMilliePos(p, next.w, next.h, EDGE);
+        if (clamped.x !== p.x || clamped.y !== p.y) writeMilliePos(clamped);
+        return clamped;
+      });
     };
-    sync();
-    const ro = new ResizeObserver(sync);
+    syncSize();
+    const ro = new ResizeObserver(syncSize);
     ro.observe(el);
-    window.addEventListener("resize", sync);
+    window.addEventListener("resize", syncSize);
     return () => {
       ro.disconnect();
-      window.removeEventListener("resize", sync);
+      window.removeEventListener("resize", syncSize);
     };
   }, [open]);
 
@@ -105,7 +114,10 @@ export function MillieOverlay({ deviceId }: Props) {
     if (!drag.current) return;
     drag.current = null;
     setDragging(false);
-    goHome();
+    setPos((p) => {
+      writeMilliePos(p);
+      return p;
+    });
   };
 
   if (!ready) return null;
@@ -132,12 +144,12 @@ export function MillieOverlay({ deviceId }: Props) {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div className={styles.stack}>
-        {line ? (
-          <p className={styles.bubble} data-err={guide.error || loadError ? "" : undefined} aria-live="polite">
-            {line}
-          </p>
-        ) : null}
+      {line ? (
+        <p className={styles.bubble} data-err={guide.error || loadError ? "" : undefined} aria-live="polite">
+          {line}
+        </p>
+      ) : null}
+      <div ref={anchorRef} className={styles.anchor}>
         <div className={styles.stage}>
           <div className={styles.drag} data-drag aria-hidden />
           <div className={styles.head}>
