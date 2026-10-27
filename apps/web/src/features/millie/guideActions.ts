@@ -154,3 +154,34 @@ export function emotionFromActions(actions: GuideAction[]): GuideEmotion | null 
   }
   return null;
 }
+
+/** Short spoken line when Nano only emitted tools (no prose). */
+export function captionFromActions(actions: GuideAction[]): string {
+  const nav = actions.filter((a) => a.type !== "react");
+  if (!nav.length) return "I'm here — ask me where something is.";
+  const labels: string[] = [];
+  for (const a of nav) {
+    if (a.type === "highlight") {
+      const tip = a.target.split(".").pop() || a.target;
+      labels.push(`pointing at ${tip}`);
+      continue;
+    }
+    const map: Record<string, string> = {
+      open_chat: "opened Chat",
+      open_machine: "opened Machine",
+      open_health: "opened Health",
+      open_terminal: "opened Terminal",
+      open_files: "opened Files",
+      open_panel: "opened the panel",
+      open_board: "opened Board",
+      open_plan: "opened Plan",
+      open_nav: "opened the sidebar",
+    };
+    labels.push(map[a.type] || a.type.replace(/_/g, " "));
+  }
+  const unique = [...new Set(labels)];
+  const head = unique[0] || "did that";
+  const rest = unique.slice(1);
+  if (!rest.length) return `Done — ${head}.`;
+  return `Done — ${head}, ${rest.join(", ")}.`;
+}

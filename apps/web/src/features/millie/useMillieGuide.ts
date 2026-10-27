@@ -5,6 +5,7 @@ import type { GuideTurnEvent } from "@nebius-desk/shared/index";
 import { api } from "@/lib/api";
 import { useDeskGuide } from "./DeskGuideContext";
 import {
+  captionFromActions,
   emotionFromActions,
   gateActions,
   parseGuidePayload,
@@ -98,14 +99,15 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
             } else if (event.type === "done") {
               // Re-parse so a fence-only reply never lands as raw JSON in the bubble.
               const parsed = parseGuidePayload(event.message?.content || raw);
-              const cleaned = parsed.text;
               const actions = gateActions(event.actions?.length ? event.actions : queued.length ? queued : parsed.actions);
+              // Nano sometimes emits only the tool fence — still show a spoken line.
+              const cleaned = parsed.text || (actions.length ? captionFromActions(actions) : "");
               const emotion = emotionFromActions(actions) || reactionForGuide(cleaned);
               setPending("");
               if (cleaned) {
                 setMessages((m) => [...m, { role: "assistant", content: cleaned }]);
                 millieRef.current?.say(cleaned.slice(0, 280));
-              } else if (!actions.length) {
+              } else {
                 setError("Millie returned an empty reply.");
               }
               millieRef.current?.play(pickSafeClip("nod"));

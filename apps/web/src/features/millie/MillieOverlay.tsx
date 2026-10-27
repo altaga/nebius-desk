@@ -128,6 +128,7 @@ export function MillieOverlay({ deviceId }: Props) {
 
   const last =
     guide.pending ||
+    (guide.sending ? "…" : null) ||
     [...guide.messages].reverse().find((m) => m.role === "assistant")?.content ||
     null;
   const line = loadError ? `Avatar failed (${loadError}).` : guide.error || last;
