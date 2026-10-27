@@ -77,6 +77,22 @@ async def stream_guide_turn(
         db.add(user_msg)
         db.commit()
 
+        # Flush SSE immediately so the cloud relay does not hit board_timeout
+        # while Nano routing/stream is still warming up.
+        yield {
+            "type": "start",
+            "session_id": session.id,
+            "route": "cloud",
+            "model": "nano",
+            "intent": "guide",
+            "thinking": False,
+            "compressed": False,
+            "note": "routing",
+            "selector": None,
+            "selector_reason": None,
+            "selector_ms": None,
+        }
+
         device = db.get(Device, session.device_id) if session.device_id else None
         plan = await plan_route(
             db,
@@ -91,19 +107,6 @@ async def stream_guide_turn(
             system_override=guide_system_message(),
             pin_identity=False,
         )
-        yield {
-            "type": "start",
-            "session_id": session.id,
-            "route": plan.route,
-            "model": plan.model,
-            "intent": plan.intent,
-            "thinking": plan.thinking,
-            "compressed": plan.compressed,
-            "note": plan.note,
-            "selector": plan.selector,
-            "selector_reason": plan.selector_reason,
-            "selector_ms": plan.selector_ms,
-        }
 
         result: RouteResult | None = None
         async for event in run_plan(settings, plan):

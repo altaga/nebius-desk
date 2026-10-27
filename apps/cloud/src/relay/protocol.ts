@@ -25,6 +25,7 @@ export type FromAgent =
 export type FromTerminal = { type: "input"; data: string } | { type: "resize"; cols: number; rows: number };
 
 export const MAX_REQUEST_BODY = 768 * 1024;
-export const RESPONSE_START_TIMEOUT_MS = 30_000;
+/** First byte from the board (headers). LLM turns need headroom over a flaky link. */
+export const RESPONSE_START_TIMEOUT_MS = 90_000;
 
 export const FORWARD_REQUEST_HEADERS = ["content-type", "accept"];

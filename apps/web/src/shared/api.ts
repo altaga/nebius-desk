@@ -66,7 +66,8 @@ async function readSse(
     signal,
   });
   if (!res.ok || !res.body) {
-    throw new Error((await res.text()) || `HTTP ${res.status}`);
+    const text = await res.text();
+    throw new Error(deskLinkMessage(text, res.status));
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();

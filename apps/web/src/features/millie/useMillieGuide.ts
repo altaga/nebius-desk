@@ -122,7 +122,14 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
         );
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
-          setError(err instanceof Error ? err.message : "Guide failed");
+          const raw = err instanceof Error ? err.message : "Guide failed";
+          const friendly =
+            /board_timeout|board_offline|board_reconnecting/i.test(raw)
+              ? "The board link dropped before Millie could answer. Pick an online board and try again."
+              : raw.includes("{") && raw.includes("detail")
+                ? "Millie could not reach the board. Try again in a moment."
+                : raw;
+          setError(friendly);
           millieRef.current?.react("relaxed", 2);
         }
         setPending("");
