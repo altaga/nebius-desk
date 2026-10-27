@@ -14,6 +14,7 @@ import {
   type MilliePos,
 } from "./millieStorage";
 import { useMillieGuide } from "./useMillieGuide";
+import { MILLIE_INTRO } from "./safeMotion";
 import styles from "./MillieOverlay.module.css";
 
 const W = 260;
@@ -37,12 +38,28 @@ export function MillieOverlay({ deviceId }: Props) {
   const desk = useDeskGuide();
   const [draft, setDraft] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [intro, setIntro] = useState(MILLIE_INTRO);
+  const greeted = useRef(false);
 
   useEffect(() => {
     writeMillieOpen(true);
     setOpen(true);
     setReady(true);
   }, []);
+
+  // Mini intro once the avatar is ready — who she is + what she does here.
+  useEffect(() => {
+    if (!open || loadError || greeted.current) return;
+    const t = window.setTimeout(() => {
+      if (greeted.current || !millieRef.current) return;
+      greeted.current = true;
+      setIntro(MILLIE_INTRO);
+      millieRef.current.react("excited", 3.2, 1);
+      millieRef.current.play("wave");
+      millieRef.current.say(MILLIE_INTRO.slice(0, 180));
+    }, 700);
+    return () => window.clearTimeout(t);
+  }, [open, loadError]);
 
   // Size + clamp from the Millie+ask anchor only — reply bubble must not move her.
   useLayoutEffect(() => {
@@ -81,8 +98,15 @@ export function MillieOverlay({ deviceId }: Props) {
     setOpen(next);
     writeMillieOpen(next);
     if (next) {
-      millieRef.current?.play("nod");
-      millieRef.current?.react("happy", 2);
+      setIntro(MILLIE_INTRO);
+      greeted.current = false;
+      window.setTimeout(() => {
+        if (!millieRef.current) return;
+        greeted.current = true;
+        millieRef.current.react("excited", 3.2, 1);
+        millieRef.current.play("wave");
+        millieRef.current.say(MILLIE_INTRO.slice(0, 180));
+      }, 500);
     }
   }, []);
 
@@ -120,6 +144,11 @@ export function MillieOverlay({ deviceId }: Props) {
     });
   };
 
+  const lastAssistant = [...guide.messages].reverse().find((m) => m.role === "assistant")?.content || null;
+  useEffect(() => {
+    if (lastAssistant) setIntro("");
+  }, [lastAssistant]);
+
   if (!ready) return null;
 
   if (!open) {
@@ -129,7 +158,8 @@ export function MillieOverlay({ deviceId }: Props) {
   const last =
     guide.pending ||
     (guide.sending ? "…" : null) ||
-    [...guide.messages].reverse().find((m) => m.role === "assistant")?.content ||
+    lastAssistant ||
+    intro ||
     null;
   const line = loadError ? `Avatar failed (${loadError}).` : guide.error || last;
 

@@ -13,7 +13,7 @@ import {
 } from "./guideActions";
 import type { MillieHandle } from "./MillieCanvas";
 import { readGuideSession, writeGuideSession } from "./millieStorage";
-import { pickSafeClip, reactionForGuide } from "./safeMotion";
+import { clipForReaction, pickSafeClip, pickSafeReaction, reactionForGuide } from "./safeMotion";
 
 export type GuideMsg = { role: "user" | "assistant"; content: string };
 
@@ -43,7 +43,9 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
     (actions: GuideAction[]) => {
       for (const action of actions) {
         if (action.type === "react") {
-          millieRef.current?.react(action.emotion, 3);
+          const emotion = pickSafeReaction(action.emotion);
+          millieRef.current?.react(emotion, 3.4, 1);
+          millieRef.current?.play(clipForReaction(emotion));
           continue;
         }
         guide.runAction(action);
@@ -69,13 +71,14 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
       // Always Nano + allowlisted guide tools — no canned local replies.
       if (!deviceId) {
         setError("Select a board first so I can open the right screens.");
-        millieRef.current?.react("sleepy", 2);
+        millieRef.current?.react("apologetic", 2.5, 1);
+        millieRef.current?.play(pickSafeClip("bow"));
         setSending(false);
         return;
       }
 
       setMessages((m) => [...m, { role: "user", content }]);
-      millieRef.current?.react("determined", 8);
+      millieRef.current?.react("thinking", 8, 0.95);
       millieRef.current?.play(pickSafeClip("thinking"));
 
       abortRef.current?.abort();
@@ -109,13 +112,14 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
                 millieRef.current?.say(cleaned.slice(0, 280));
               } else {
                 setError("Millie returned an empty reply.");
+                millieRef.current?.react("flustered", 2.5, 1);
               }
-              millieRef.current?.play(pickSafeClip("nod"));
-              // Apply nav/highlight; react tool (or heuristic fallback) drives the face.
+              // Apply nav/highlight; react + matching clip drive face/body.
               applyActions(actions.some((a) => a.type === "react") ? actions : [...actions, { type: "react", emotion }]);
             } else if (event.type === "error") {
               setError(event.detail);
-              millieRef.current?.react("sleepy", 2.5);
+              millieRef.current?.react("apologetic", 2.8, 1);
+              millieRef.current?.play(pickSafeClip("bow"));
             }
           },
           ac.signal
@@ -130,7 +134,8 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
                 ? "Millie could not reach the board. Try again in a moment."
                 : raw;
           setError(friendly);
-          millieRef.current?.react("relaxed", 2);
+          millieRef.current?.react("sad", 2.6, 0.9);
+          millieRef.current?.play(pickSafeClip("bow"));
         }
         setPending("");
       } finally {

@@ -1,19 +1,29 @@
 /**
  * Curated Millie motions after visual QA on chibi v2.2.
- * Dropped anything with waist gaps, mesh crosses, hand/hair clipping, or chin bleed.
+ * Keep in sync with apps/api GUIDE_EMOTIONS and guideActions EMOTIONS.
  */
 
-export const SAFE_CLIPS = ["idle", "nod", "shake", "thinking"] as const;
+export const SAFE_CLIPS = ["idle", "wave", "nod", "shake", "thinking", "celebrate", "bow"] as const;
 
 export const SAFE_REACTIONS = [
   "neutral",
   "happy",
   "excited",
-  "relaxed",
+  "love",
+  "shy",
+  "surprised",
   "sleepy",
+  "relaxed",
+  "wink",
+  "thinking",
+  "determined",
+  "smug",
   "laugh",
   "cat",
-  "determined",
+  "apologetic",
+  "pout",
+  "flustered",
+  "sad",
 ] as const;
 
 export const SAFE_OVERLAYS = ["Blush", "Sparkles", "Hearts"] as const;
@@ -23,6 +33,10 @@ export type SafeReaction = (typeof SAFE_REACTIONS)[number];
 
 const CLIP_SET = new Set<string>(SAFE_CLIPS);
 const REACT_SET = new Set<string>(SAFE_REACTIONS);
+
+/** Opening line — local UI chrome, not a Nano reply. */
+export const MILLIE_INTRO =
+  "Hi — I'm Millie, your desk guide. Ask me where something is and I'll open it and point. I never run commands for you.";
 
 export function pickSafeClip(name: string, fallback: SafeClip = "idle"): SafeClip {
   return CLIP_SET.has(name) ? (name as SafeClip) : fallback;
@@ -35,12 +49,49 @@ export function pickSafeReaction(name: string, fallback: SafeReaction = "happy")
 /** Fallback when Nano omits the react tool — never invents a glitchy name. */
 export function reactionForGuide(text: string): SafeReaction {
   const t = text.toLowerCase();
-  if (/hola|hello|hi\b|hey|gracias|thank|bienven/.test(t)) return "happy";
-  if (/error|fail|broken|ayuda|help|stuck|problema/.test(t)) return "determined";
-  if (/terminal|machine|board|setup|pair|abre|open/.test(t)) return "determined";
-  if (/jaja|lol|funny|gracioso/.test(t)) return "laugh";
-  if (/bien|ok|listo|done|perfecto/.test(t)) return "excited";
-  if (/descanso|tired|noche/.test(t)) return "sleepy";
+  if (/jaja|lol|funny|gracioso|haha/.test(t)) return "laugh";
+  if (/amor|love|❤|heart|lindo|cute/.test(t)) return "love";
+  if (/gracias|thanks|thank|de nada|anytime/.test(t)) return "shy";
+  if (/hola|hello|hi\b|hey|bienven|welcome/.test(t)) return "excited";
+  if (/wink|guiño|😉/.test(t)) return "wink";
+  if (/cat|nya|miau|🐱/.test(t)) return "cat";
+  if (/sorry|perdon|perdón|oops|apolog|fall[oó]|error|fail|broken/.test(t)) return "apologetic";
+  if (/triste|sad|ugh|pout|enoja/.test(t)) return "pout";
+  if (/sorprend|wow|wait|oh\b|¡/.test(t)) return "surprised";
+  if (/fluster|nervous|espera|umm/.test(t)) return "flustered";
+  if (/descanso|tired|noche|sleep|zzz/.test(t)) return "sleepy";
+  if (/relax|calm|tranqui|okey/.test(t)) return "relaxed";
+  if (/listo|done|perfecto|ready|opened|abr[ií]/.test(t)) return "excited";
+  if (/terminal|machine|board|setup|pair|help|ayuda|stuck|problema|determin/.test(t)) return "determined";
+  if (/pien|think|hmm|mir[ae]/.test(t)) return "thinking";
+  if (/smug|heh|claro|obvio/.test(t)) return "smug";
   return "happy";
 }
 
+/** Clip that pairs well with a reaction after a guide turn. */
+export function clipForReaction(emotion: SafeReaction): SafeClip {
+  switch (emotion) {
+    case "excited":
+    case "love":
+    case "laugh":
+    case "cat":
+      return "celebrate";
+    case "apologetic":
+    case "sad":
+    case "shy":
+      return "bow";
+    case "thinking":
+    case "flustered":
+      return "thinking";
+    case "surprised":
+      return "shake";
+    case "wink":
+    case "happy":
+    case "smug":
+      return "wave";
+    case "determined":
+      return "nod";
+    default:
+      return "nod";
+  }
+}

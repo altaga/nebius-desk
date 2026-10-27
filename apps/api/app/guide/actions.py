@@ -28,11 +28,21 @@ GUIDE_EMOTIONS = frozenset(
         "neutral",
         "happy",
         "excited",
+        "love",
+        "shy",
+        "surprised",
         "relaxed",
         "sleepy",
+        "wink",
+        "thinking",
         "laugh",
         "cat",
         "determined",
+        "smug",
+        "apologetic",
+        "pout",
+        "flustered",
+        "sad",
     }
 )
 

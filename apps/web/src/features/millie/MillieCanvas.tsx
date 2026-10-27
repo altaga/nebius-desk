@@ -8,7 +8,7 @@ const VRM_URL = "/millie/millie_chibi_v2_2_web.vrm";
 
 export type MillieHandle = {
   say: (text: string) => void;
-  react: (name: string, hold?: number) => void;
+  react: (name: string, hold?: number, intensity?: number) => void;
   play: (name: string) => void;
   pointAt: (el: Element | null) => void;
   stopPointing: () => void;
@@ -27,11 +27,11 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
     say(text) {
       ctrlRef.current?.say(text);
     },
-    react(name, hold = 2.5) {
-      ctrlRef.current?.react(name, { hold });
+    react(name, hold = 2.5, intensity = 1) {
+      ctrlRef.current?.react(name, { hold, intensity, fade: 0.28 });
     },
     play(name) {
-      ctrlRef.current?.play(name);
+      ctrlRef.current?.play(name, { fade: 0.25 });
     },
     pointAt(el) {
       if (!el || !ctrlRef.current || !canvasRef.current) return;
@@ -131,8 +131,8 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         const millie = new MillieController(vrm, { camera, scene });
         ctrlRef.current = millie;
         millie.play("idle");
-        millie.react("happy", { hold: 1.5, intensity: 0.7, fade: 0.4 });
-        millie.play("nod");
+        millie.react("excited", { hold: 2.8, intensity: 1, fade: 0.28 });
+        millie.play("wave");
       } catch (err) {
         onLoadError?.(err instanceof Error ? err.message : "VRM failed to load");
         return;

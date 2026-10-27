@@ -20,11 +20,21 @@ export type GuideEmotion =
   | "neutral"
   | "happy"
   | "excited"
+  | "love"
+  | "shy"
+  | "surprised"
   | "relaxed"
   | "sleepy"
+  | "wink"
+  | "thinking"
   | "laugh"
   | "cat"
-  | "determined";
+  | "determined"
+  | "smug"
+  | "apologetic"
+  | "pout"
+  | "flustered"
+  | "sad";
 
 export type GuideTarget =
   | "nav.open_machine"
@@ -68,11 +78,21 @@ const EMOTIONS = new Set<string>([
   "neutral",
   "happy",
   "excited",
+  "love",
+  "shy",
+  "surprised",
   "relaxed",
   "sleepy",
+  "wink",
+  "thinking",
   "laugh",
   "cat",
   "determined",
+  "smug",
+  "apologetic",
+  "pout",
+  "flustered",
+  "sad",
 ]);
 
 const TYPES = new Set<string>(GUIDE_ACTION_TYPES);
