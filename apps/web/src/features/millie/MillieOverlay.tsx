@@ -10,7 +10,7 @@ import { useMillieGuide } from "./useMillieGuide";
 import styles from "./MillieOverlay.module.css";
 
 const W = 260;
-const H_GUESS = 340;
+const H_GUESS = 400;
 const EDGE = 8;
 
 type Props = { deviceId: string | null };
@@ -132,19 +132,21 @@ export function MillieOverlay({ deviceId }: Props) {
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <div className={styles.stage}>
-        <div className={styles.drag} data-drag aria-hidden />
-        <div className={styles.head}>
-          <button type="button" className={styles.icon} onClick={() => setOpenPersist(false)} aria-label="Close Millie">
-            <IconX size={14} />
-          </button>
-        </div>
-        <MillieCanvas ref={millieRef} active={open} onLoadError={setLoadError} />
+      <div className={styles.stack}>
         {line ? (
           <p className={styles.bubble} data-err={guide.error || loadError ? "" : undefined} aria-live="polite">
             {line}
           </p>
         ) : null}
+        <div className={styles.stage}>
+          <div className={styles.drag} data-drag aria-hidden />
+          <div className={styles.head}>
+            <button type="button" className={styles.icon} onClick={() => setOpenPersist(false)} aria-label="Close Millie">
+              <IconX size={14} />
+            </button>
+          </div>
+          <MillieCanvas ref={millieRef} active={open} onLoadError={setLoadError} />
+        </div>
         <form
           className={styles.ask}
           onSubmit={(e) => {

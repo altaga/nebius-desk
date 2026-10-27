@@ -52,7 +52,7 @@ export function localGuideReply(userText: string): LocalGuideReply | null {
   if (!t || t.length > 80) return null;
   if (/^(hola|hello|hi|hey|buenas|buen[oa]s?\s*(d[ií]as|tardes|noches)?)[!?.]*$/i.test(t)) {
     return {
-      text: "Hi — I am Millie. Ask me how to use the desk, pair a board, or find a screen. I open tabs and point; I never run commands for you.",
+      text: "Hi — I’m Millie. Ask me where things are; I’ll open tabs and point.",
       emotion: "happy",
     };
   }
