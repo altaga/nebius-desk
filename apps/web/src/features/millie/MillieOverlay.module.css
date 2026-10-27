@@ -70,14 +70,14 @@
 
 .ask {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 6px;
   width: 100%;
   padding: 4px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
   border: 1px solid color-mix(in srgb, var(--line-strong) 55%, transparent);
   backdrop-filter: blur(10px);
 }

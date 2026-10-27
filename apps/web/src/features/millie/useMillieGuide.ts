@@ -12,7 +12,7 @@ import {
 } from "./guideActions";
 import type { MillieHandle } from "./MillieCanvas";
 import { readGuideSession, writeGuideSession } from "./millieStorage";
-import { localGuideReply, pickSafeClip, reactionForGuide } from "./safeMotion";
+import { pickSafeClip, reactionForGuide } from "./safeMotion";
 
 export type GuideMsg = { role: "user" | "assistant"; content: string };
 
@@ -57,34 +57,23 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
     [guide, millieRef]
   );
 
-  const finishLocal = useCallback(
-    (userText: string, reply: { text: string; emotion: string }) => {
-      setMessages((m) => [...m, { role: "user", content: userText }, { role: "assistant", content: reply.text }]);
-      millieRef.current?.say(reply.text.slice(0, 280));
-      millieRef.current?.react(reply.emotion, 3);
-      millieRef.current?.play(pickSafeClip("nod"));
-    },
-    [millieRef]
-  );
-
   const send = useCallback(
     async (text: string) => {
       const content = text.trim();
-      if (!content || !deviceId || sending) return;
+      if (!content || sending) return;
       setSending(true);
       setError(null);
       setPending("");
 
-      // Zero-token path: greetings / thanks / identity — client only.
-      const local = localGuideReply(content);
-      if (local) {
-        finishLocal(content, local);
+      // Always Nano + allowlisted guide tools — no canned local replies.
+      if (!deviceId) {
+        setError("Select a board first so I can open the right screens.");
+        millieRef.current?.react("sleepy", 2);
         setSending(false);
         return;
       }
 
       setMessages((m) => [...m, { role: "user", content }]);
-      // Free local UX while Nano thinks — not billed.
       millieRef.current?.react("determined", 8);
       millieRef.current?.play(pickSafeClip("thinking"));
 
@@ -116,6 +105,8 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
               if (cleaned) {
                 setMessages((m) => [...m, { role: "assistant", content: cleaned }]);
                 millieRef.current?.say(cleaned.slice(0, 280));
+              } else if (!actions.length) {
+                setError("Millie returned an empty reply.");
               }
               millieRef.current?.play(pickSafeClip("nod"));
               // Apply nav/highlight; react tool (or heuristic fallback) drives the face.
@@ -137,7 +128,7 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
         setSending(false);
       }
     },
-    [deviceId, sending, millieRef, applyActions, finishLocal]
+    [deviceId, sending, millieRef, applyActions]
   );
 
   const stop = useCallback(() => {

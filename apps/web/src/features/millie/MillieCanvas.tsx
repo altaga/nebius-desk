@@ -91,15 +91,12 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         const box = new THREE.Box3().setFromObject(vrm.scene);
         if (box.isEmpty()) return;
         const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-        // Slight vertical bias: keep sneakers just above the canvas bottom (ask sits under).
-        const target = center.clone();
-        target.y = box.min.y + size.y * 0.52;
-        const pad = 1.06;
-        const halfH = (size.y * pad) / 2;
+        // Aim a bit above mid-body and pad tall so sneakers sit clearly above the ask bar.
+        const targetY = box.min.y + size.y * 0.58;
+        const halfH = (size.y * 1.18) / 2;
         const dist = halfH / Math.tan((camera.fov * Math.PI) / 360) / Math.max(camera.aspect, 0.5);
-        camera.position.set(target.x, target.y, target.z + dist);
-        camera.lookAt(target.x, target.y, target.z);
+        camera.position.set(0, targetY, dist);
+        camera.lookAt(0, targetY, 0);
         camera.updateProjectionMatrix();
       };
 

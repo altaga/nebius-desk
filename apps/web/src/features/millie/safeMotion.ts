@@ -44,29 +44,3 @@ export function reactionForGuide(text: string): SafeReaction {
   return "happy";
 }
 
-/** Zero-token local replies for trivial turns — skips Nano entirely. */
-export type LocalGuideReply = { text: string; emotion: SafeReaction };
-
-export function localGuideReply(userText: string): LocalGuideReply | null {
-  const t = userText.trim().toLowerCase();
-  if (!t || t.length > 80) return null;
-  if (/^(hola|hello|hi|hey|buenas|buen[oa]s?\s*(d[ií]as|tardes|noches)?)[!?.]*$/i.test(t)) {
-    return {
-      text: "Hi — I’m Millie. Ask me where things are; I’ll open tabs and point.",
-      emotion: "happy",
-    };
-  }
-  if (/^(qui[eé]n eres|who are you|qu[eé] eres|what are you)[!?.]*$/i.test(t)) {
-    return {
-      text: "I am Millie, your UI guide. I explain setups and highlight controls. Your cloud Nano turn only runs when you need a real how-to.",
-      emotion: "happy",
-    };
-  }
-  if (/^(gracias|thanks|thank you|ty)[!?.]*$/i.test(t)) {
-    return { text: "Anytime — ask whenever you get stuck.", emotion: "happy" };
-  }
-  if (/^(ok|okay|vale|listo|perfecto|done|bien)[!?.]*$/i.test(t)) {
-    return { text: "Got it.", emotion: "excited" };
-  }
-  return null;
-}
