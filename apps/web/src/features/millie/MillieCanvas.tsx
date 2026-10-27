@@ -69,10 +69,10 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
 
       const clock = new THREE.Clock();
       scene = new THREE.Scene();
-      // Full-body framing; lookAt sits a bit low so feet clear the ask bar.
+      // Full-body framing with bottom margin so sneakers stay inside the canvas.
       const camera = new THREE.PerspectiveCamera(24, 1, 0.1, 20);
-      camera.position.set(0, 0.66, 2.9);
-      camera.lookAt(0, 0.48, 0);
+      camera.position.set(0, 0.58, 3.25);
+      camera.lookAt(0, 0.38, 0);
 
       scene.add(new THREE.AmbientLight(0xffffff, 0.6));
       const key = new THREE.DirectionalLight(0xffffff, 1.6);
