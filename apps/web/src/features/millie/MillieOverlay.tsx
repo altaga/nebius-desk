@@ -10,7 +10,7 @@ import { useMillieGuide } from "./useMillieGuide";
 import styles from "./MillieOverlay.module.css";
 
 const W = 260;
-const H_GUESS = 400;
+const H_GUESS = 320;
 const EDGE = 8;
 
 type Props = { deviceId: string | null };

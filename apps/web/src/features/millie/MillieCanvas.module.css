@@ -1,7 +1,7 @@
 .canvas {
   width: 100%;
-  height: min(280px, 42dvh);
-  min-height: 220px;
+  height: min(236px, 36dvh);
+  min-height: 200px;
   overflow: hidden;
   background: transparent;
 }

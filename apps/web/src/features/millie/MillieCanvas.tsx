@@ -69,10 +69,10 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
 
       const clock = new THREE.Clock();
       scene = new THREE.Scene();
-      // Full body, feet near the canvas bottom so she sits on the ask bar.
+      // Seed framing; after VRM load we fit the camera to her bounds.
       const camera = new THREE.PerspectiveCamera(24, 1, 0.1, 20);
-      camera.position.set(0, 0.78, 2.95);
-      camera.lookAt(0, 0.62, 0);
+      camera.position.set(0, 0.7, 2.8);
+      camera.lookAt(0, 0.55, 0);
 
       scene.add(new THREE.AmbientLight(0xffffff, 0.6));
       const key = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -86,14 +86,32 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
       host.appendChild(renderer.domElement);
       canvasRef.current = renderer.domElement;
 
+      const fitCamera = () => {
+        if (!vrm || !camera) return;
+        const box = new THREE.Box3().setFromObject(vrm.scene);
+        if (box.isEmpty()) return;
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        // Slight vertical bias: keep sneakers just above the canvas bottom (ask sits under).
+        const target = center.clone();
+        target.y = box.min.y + size.y * 0.52;
+        const pad = 1.06;
+        const halfH = (size.y * pad) / 2;
+        const dist = halfH / Math.tan((camera.fov * Math.PI) / 360) / Math.max(camera.aspect, 0.5);
+        camera.position.set(target.x, target.y, target.z + dist);
+        camera.lookAt(target.x, target.y, target.z);
+        camera.updateProjectionMatrix();
+      };
+
       const resize = () => {
         if (!renderer || !host) return;
         const w = host.clientWidth || 280;
-        const h = host.clientHeight || 320;
+        const h = host.clientHeight || 240;
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         renderer.setSize(w, h, false);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
+        fitCamera();
       };
       resize();
       ro = new ResizeObserver(resize);
@@ -112,6 +130,7 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
           o.frustumCulled = false;
         });
         scene.add(vrm.scene);
+        fitCamera();
         const millie = new MillieController(vrm, { camera, scene });
         ctrlRef.current = millie;
         millie.play("idle");
