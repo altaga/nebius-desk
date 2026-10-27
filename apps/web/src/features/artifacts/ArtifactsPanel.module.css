@@ -1,0 +1,75 @@
+.panel {
+  border-left: 1px solid var(--border);
+  background: var(--bg-elevated);
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  border: 0;
+  background: transparent;
+  padding: 12px 10px;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.tabs .active {
+  color: var(--ink);
+  background: #fff;
+  font-weight: 600;
+}
+
+.body {
+  padding: 16px;
+  overflow: auto;
+}
+
+.body h3 {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+}
+
+.body h3 + .stats,
+.body h3 + .muted {
+  margin-bottom: 18px;
+}
+
+.stats {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.stats > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  font-size: 0.82rem;
+}
+
+.stats dt {
+  color: var(--ink-muted);
+}
+
+.stats dd {
+  margin: 0;
+  font-family: var(--font-mono);
+}
+
+.muted {
+  color: var(--ink-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}

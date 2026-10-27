@@ -1,0 +1,138 @@
+/*
+ * NebiusDesk — "field console" design tokens.
+ * Graphite surfaces, one signal color, hairline structure.
+ * Route colors carry meaning: --edge = handled on a Jetson, --cloud = sent to Nebius.
+ */
+:root {
+  --bg: #111312;
+  --surface: #151817;
+  --raised: #1b1f1d;
+  --hover: #1f2422;
+  --active: #252b28;
+  --line: #262c29;
+  --line-strong: #353c38;
+  --ink: #e4e9e5;
+  --ink-2: #a1aba5;
+  --ink-3: #8e9892;
+  --signal: #d4f45e;
+  --signal-ink: #11150b;
+  --signal-soft: #d4f45e1f;
+  --edge: #d4f45e;
+  --cloud: #8db3ff;
+  --warn: #f0b45c;
+  --danger: #f06f69;
+  --font-sans: var(--font-plex-sans), "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "Cascadia Code", monospace;
+  --font-display: var(--font-sans);
+  --r-sm: 5px;
+  --r-md: 7px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --nav-w: 300px;
+  --panel-w: 300px;
+  /* legacy aliases still used by auth screens */
+  --bg-elevated: var(--raised);
+  --border: var(--line-strong);
+  --ink-muted: var(--ink-2);
+  --accent: var(--signal);
+  --accent-dim: #2b3315;
+  --ok: var(--signal);
+  --ink-on-accent: var(--signal-ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "ss02";
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+:focus-visible {
+  outline: 1.5px solid var(--signal);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--signal) 25%, transparent);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes scan {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

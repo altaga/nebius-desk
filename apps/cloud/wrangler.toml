@@ -1,0 +1,27 @@
+name = "nebius-desk-cloud"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[vars]
+NEBIUS_BASE_URL = "https://api.tokenfactory.nebius.com/v1"
+# Lifetime credits on the Tavily key, shared by every account.
+TAVILY_KEY_CAP = "1500"
+BOOTSTRAP_USERNAME = "admin"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "nebius-desk"
+database_id = "157494fc-8133-4ca7-9466-7401c26ae2e8"
+migrations_dir = "migrations"
+
+[[durable_objects.bindings]]
+name = "RELAY"
+class_name = "DeviceRelay"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["DeviceRelay"]
+
+# Secrets (wrangler secret put): JWT_SECRET, BOOTSTRAP_PASSWORD, NEBIUS_API_KEY, TAVILY_API_KEY

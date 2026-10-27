@@ -1,0 +1,33 @@
+.wrap {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  background: var(--bg);
+}
+
+.wrap p {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.bar {
+  position: relative;
+  width: 64px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+
+.bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, var(--edge), var(--cloud));
+  animation: scan 1.1s var(--ease) infinite;
+}

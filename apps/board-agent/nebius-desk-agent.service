@@ -1,0 +1,12 @@
+[Unit]
+Description=Nebius Desk board agent
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/nebius-desk/apps/board-agent/.venv/bin/python %h/nebius-desk/apps/board-agent/desk_agent.py run
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

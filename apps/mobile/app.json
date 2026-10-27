@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "NebiusDesk",
+    "slug": "nebius-desk",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "nebiusdesk",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nebiusdesk.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F5F2EB"
+      },
+      "package": "com.nebiusdesk.app"
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": ["expo-router", "expo-secure-store"]
+  }
+}

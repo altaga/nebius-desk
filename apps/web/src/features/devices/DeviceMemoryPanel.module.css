@@ -1,0 +1,72 @@
+.panel {
+  border-left: 1px solid var(--border);
+  background: var(--bg-sidebar);
+  padding: 16px 14px;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto;
+  gap: 8px;
+  min-height: 0;
+}
+
+.panel h3 {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+.panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.panel li {
+  display: grid;
+  gap: 2px;
+  font-size: 0.8rem;
+  padding: 8px;
+  border-radius: 8px;
+  background: #fff8;
+}
+
+.panel li strong {
+  font-size: 0.72rem;
+  color: var(--ink-muted);
+}
+
+.panel textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  font: inherit;
+}
+
+.panel button {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.muted {
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+
+.error {
+  margin: 0;
+  color: #8b2e2e;
+  font-size: 0.75rem;
+}

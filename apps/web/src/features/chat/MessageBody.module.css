@@ -1,0 +1,65 @@
+.body {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.p,
+.h {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.h {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.body strong {
+  font-weight: 600;
+}
+
+.list {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+
+.list li::marker {
+  color: var(--ink-3);
+}
+
+.quote {
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-2);
+}
+
+.code {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.inline {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0 0.28em;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}

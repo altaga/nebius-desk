@@ -1,0 +1,171 @@
+.view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  padding: 12px 16px 0;
+}
+
+.board label {
+  display: grid;
+  gap: 4px;
+  flex: 1;
+  min-width: 160px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.board input {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.board span {
+  color: var(--ink-2);
+  font-size: 13px;
+  padding-bottom: 8px;
+}
+
+.board button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink);
+}
+
+.tabs {
+  display: flex;
+  gap: 6px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.tabs button[data-on="true"] {
+  border-color: var(--signal);
+  color: var(--ink);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.body[data-fill="true"] {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.body[data-fill="true"] > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.term {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding: 8px;
+  border-radius: 0;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.remote {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.remote input {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--signal);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.grid div {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.grid dt {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.grid dd {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.note,
+.error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.action {
+  justify-self: start;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.action:hover {
+  background: var(--hover);
+}
+

@@ -1,0 +1,29 @@
+.badge,
+.idle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, 55vw);
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.idle {
+  background: var(--bg-elevated);
+  color: var(--ink-muted);
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex-shrink: 0;
+}

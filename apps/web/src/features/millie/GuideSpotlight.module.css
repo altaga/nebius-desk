@@ -1,0 +1,22 @@
+.spot {
+  position: fixed;
+  z-index: 40;
+  margin: 0;
+  padding: 0;
+  border: 1.5px solid var(--signal);
+  border-radius: var(--r-md);
+  background: var(--signal-soft);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+  animation: pulse 1.4s var(--ease) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35), 0 0 0 0 var(--signal-soft);
+  }
+  50% {
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35), 0 0 0 6px transparent;
+  }
+}

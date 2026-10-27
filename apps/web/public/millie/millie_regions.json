@@ -1,0 +1,168 @@
+{
+ "version": "chibi-v2.1",
+ "formula": "luminance-preserving: t=L(p)/L(base); t<=1 -> new*t, else new+(1-new)*(L(p)-L(base))/(1-L(base)); L=Rec.709 luma on sRGB values",
+ "ids": {
+  "misc": 0,
+  "skin": 1,
+  "hair": 2,
+  "iris": 3,
+  "eye_white": 4,
+  "lashes": 5,
+  "brows": 6,
+  "blush": 7,
+  "teeth": 8,
+  "mouth": 9,
+  "jacket": 10,
+  "jacket_trim": 11,
+  "jacket_glow": 12,
+  "innershirt": 13,
+  "tights": 14,
+  "turtleneck": 15,
+  "shorts": 16,
+  "shorts_trim": 17,
+  "shorts_cuff": 18,
+  "shorts_tab": 19,
+  "belt": 20,
+  "buckle": 21,
+  "shoes": 22,
+  "shoes_accent": 23,
+  "shoes_laces": 24,
+  "shoes_lining": 25,
+  "badge": 26,
+  "badge_trim": 27,
+  "badge_text": 28
+ },
+ "atlases": {
+  "body": {
+   "map": "regions_body.png",
+   "size": [
+    2048,
+    2048
+   ]
+  },
+  "face": {
+   "map": "regions_face.png",
+   "size": [
+    2048,
+    2048
+   ]
+  },
+  "hair": {
+   "map": null,
+   "region": "hair"
+  }
+ },
+ "baked": {
+  "body": {
+   "skin": "#fde6cc",
+   "hair": "#207b72",
+   "teeth": "#fcfbfb",
+   "mouth": "#e99284",
+   "jacket": "#e4e9e5",
+   "jacket_trim": "#d4f45e",
+   "jacket_glow": "#d4f45e",
+   "innershirt": "#262a28",
+   "tights": "#262a28",
+   "turtleneck": "#2b302d",
+   "shorts": "#d6dcd8",
+   "shorts_trim": "#d4f45e",
+   "shorts_cuff": "#d4f45e",
+   "shorts_tab": "#d4f45e",
+   "belt": "#2b302d",
+   "buckle": "#d4f45e",
+   "shoes": "#e4e9e5",
+   "shoes_accent": "#d4f45e",
+   "shoes_laces": "#9aa39d",
+   "shoes_lining": "#2b302d",
+   "badge": "#e4e9e5",
+   "badge_trim": "#d4f45e",
+   "badge_text": "#262a28"
+  },
+  "face": {
+   "skin": "#fde8d7",
+   "iris": "#7b420c",
+   "eye_white": "#ffffff",
+   "lashes": "#1a0f0b",
+   "brows": "#7e5e4c",
+   "blush": "#df7888",
+   "teeth": "#ffffff"
+  },
+  "hair": {
+   "hair": "#7dc9c2"
+  },
+  "body_emit": {
+   "jacket_glow": "#d4f45e"
+  }
+ },
+ "material_regions": {
+  "outline": "all MToon outlineColorFactor",
+  "visor": "M_Glow litFactor + emissive"
+ },
+ "palette": "nebius",
+ "presets": {
+  "nebius": {
+   "skin": "#fde6cc",
+   "hair": "#207b72",
+   "iris": "#7b420c",
+   "eye_white": "#ffffff",
+   "lashes": "#1a0f0b",
+   "brows": "#7e5e4c",
+   "blush": "#df7888",
+   "teeth": "#fcfbfb",
+   "mouth": "#e99284",
+   "jacket": "#e4e9e5",
+   "jacket_trim": "#d4f45e",
+   "jacket_glow": "#d4f45e",
+   "innershirt": "#262a28",
+   "tights": "#262a28",
+   "turtleneck": "#2b302d",
+   "shorts": "#d6dcd8",
+   "shorts_trim": "#d4f45e",
+   "shorts_cuff": "#d4f45e",
+   "shorts_tab": "#d4f45e",
+   "belt": "#2b302d",
+   "buckle": "#d4f45e",
+   "shoes": "#e4e9e5",
+   "shoes_accent": "#d4f45e",
+   "shoes_laces": "#9aa39d",
+   "shoes_lining": "#2b302d",
+   "badge": "#e4e9e5",
+   "badge_trim": "#d4f45e",
+   "badge_text": "#262a28",
+   "outline": "#1f2321",
+   "visor": "#d4f45e"
+  },
+  "original": {
+   "skin": "#fde6cc",
+   "hair": "#207b72",
+   "teeth": "#fcfbfb",
+   "mouth": "#e99284",
+   "jacket": "#f8fbfd",
+   "jacket_trim": "#3ddac4",
+   "jacket_glow": "#22e6ff",
+   "innershirt": "#1b2a4a",
+   "tights": "#16223d",
+   "turtleneck": "#1a2846",
+   "shorts": "#233660",
+   "shorts_trim": "#3ddac4",
+   "shorts_cuff": "#27324e",
+   "shorts_tab": "#5cd8cb",
+   "belt": "#27324e",
+   "buckle": "#b7c4d4",
+   "shoes": "#f6f9fc",
+   "shoes_accent": "#5cd8cb",
+   "shoes_laces": "#b7c4d4",
+   "shoes_lining": "#27324e",
+   "badge": "#f5f8fa",
+   "badge_trim": "#3ddac4",
+   "badge_text": "#1b2a4a",
+   "iris": "#7b420c",
+   "eye_white": "#ffffff",
+   "lashes": "#1a0f0b",
+   "brows": "#7e5e4c",
+   "blush": "#df7888",
+   "outline": "#3b3f46",
+   "visor": "#22e6ff"
+  }
+ }
+}

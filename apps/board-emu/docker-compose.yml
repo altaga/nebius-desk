@@ -1,0 +1,55 @@
+# Fake boards for onboarding + multi-machine UI + cloud chat.
+# Nano / Lightning / Super via Nebius gateway (spends user credits).
+# No Auto route, no local model, no real CLI/FS.
+# Never name an emu "Millie" — that name is reserved for the real Jetson.
+#
+#   cd apps/board-emu
+#   copy .env.example .env
+#   docker compose build
+#   docker compose run --rm natasha pair   # claim CODE in the desk
+#   docker compose run --rm nova pair
+#   docker compose run --rm orin pair
+#   docker compose up -d
+#
+x-board: &board
+  build:
+    context: ..
+    dockerfile: board-emu/Dockerfile
+  image: nebius-board-emu:local
+  restart: unless-stopped
+  environment: &board-env
+    CLOUD_URL: ${CLOUD_URL:-https://nebius-desk-cloud.devops-640.workers.dev}
+    BOARD_EMU: "1"
+    LLM_MODE: cloud_only
+
+# Persist under the host folder (Windows): C:\Users\VAI\Documents\Docker\board-emu\<board>\
+services:
+  natasha:
+    <<: *board
+    hostname: Natasha
+    environment:
+      <<: *board-env
+      BOARD_NAME: Natasha
+    volumes:
+      - ${BOARD_EMU_DATA:-C:/Users/VAI/Documents/Docker/board-emu}/natasha/config:/home/jetson/.config/nebius-desk
+      - ${BOARD_EMU_DATA:-C:/Users/VAI/Documents/Docker/board-emu}/natasha/data:/home/jetson/data
+
+  nova:
+    <<: *board
+    hostname: Nova
+    environment:
+      <<: *board-env
+      BOARD_NAME: Nova
+    volumes:
+      - ${BOARD_EMU_DATA:-C:/Users/VAI/Documents/Docker/board-emu}/nova/config:/home/jetson/.config/nebius-desk
+      - ${BOARD_EMU_DATA:-C:/Users/VAI/Documents/Docker/board-emu}/nova/data:/home/jetson/data
+
+  orin:
+    <<: *board
+    hostname: Orin
+    environment:
+      <<: *board-env
+      BOARD_NAME: Orin
+    volumes:
+      - ${BOARD_EMU_DATA:-C:/Users/VAI/Documents/Docker/board-emu}/orin/config:/home/jetson/.config/nebius-desk
+      - ${BOARD_EMU_DATA:-C:/Users/VAI/Documents/Docker/board-emu}/orin/data:/home/jetson/data
