@@ -16,7 +16,17 @@ import {
   writeMilliePos,
   type MilliePos,
 } from "./millieStorage";
-import { isTourCommand, labelForTarget, TOUR_STEPS, tourCenterPos, tourClearPos, type TourLang } from "./millieTour";
+import {
+  AUTO_TOUR_STEP_MS,
+  isAnyTourCommand,
+  isAutoTourCommand,
+  isTourCommand,
+  labelForTarget,
+  TOUR_STEPS,
+  tourCenterPos,
+  tourClearPos,
+  type TourLang,
+} from "./millieTour";
 import { useMillieGuide } from "./useMillieGuide";
 import { useMilliePresence } from "./useMilliePresence";
 import { MILLIE_INTRO, MILLIE_PLACEHOLDER } from "./safeMotion";
@@ -46,6 +56,7 @@ export function MillieOverlay({ deviceId }: Props) {
   const drag = useRef<{ ox: number; oy: number; px: number; py: number } | null>(null);
   const savedPos = useRef<MilliePos | null>(null);
   const tourTimers = useRef<number[]>([]);
+  const autoTour = useRef(false);
   const guide = useMillieGuide(deviceId, millieRef);
   const desk = useDeskGuide();
   const [draft, setDraft] = useState("");
@@ -200,6 +211,7 @@ export function MillieOverlay({ deviceId }: Props) {
 
   const endTour = useCallback(() => {
     clearTourTimers();
+    autoTour.current = false;
     setTourIndex(null);
     desk.setTourActive(false);
     millieRef.current?.setTourLook(false);
@@ -212,27 +224,56 @@ export function MillieOverlay({ deviceId }: Props) {
     millieRef.current?.play("bow");
   }, [desk, clearTourTimers]);
 
-  const startTour = useCallback(() => {
-    clearTourTimers();
-    savedPos.current = pos;
-    desk.setTourActive(true);
-    setPresenceLine(null);
-    setIntro("");
-    setTourIndex(0);
-    // Dock to center first — outfit waits 1s after she's fixed there.
-    setPos(tourCenterPos(W_TOUR, H_TOUR, EDGE));
-    const lookId = window.setTimeout(() => {
-      millieRef.current?.setTourLook(true);
-      millieRef.current?.react("excited", 2.6, 1);
-      millieRef.current?.play("celebrate");
-      const stepId = window.setTimeout(() => applyTourStep(0), 800);
-      tourTimers.current.push(stepId);
-    }, 1000);
-    tourTimers.current.push(lookId);
-  }, [pos, desk, applyTourStep, clearTourTimers]);
+  const scheduleAutoAdvance = useCallback(
+    (fromIndex: number) => {
+      if (!autoTour.current) return;
+      const id = window.setTimeout(() => {
+        if (!autoTour.current) return;
+        const next = fromIndex + 1;
+        if (next >= TOUR_STEPS.length) {
+          endTour();
+          return;
+        }
+        setTourIndex(next);
+        applyTourStep(next);
+        scheduleAutoAdvance(next);
+      }, AUTO_TOUR_STEP_MS);
+      tourTimers.current.push(id);
+    },
+    [applyTourStep, endTour]
+  );
+
+  const startTour = useCallback(
+    (opts?: { auto?: boolean }) => {
+      clearTourTimers();
+      autoTour.current = !!opts?.auto;
+      savedPos.current = pos;
+      desk.setTourActive(true);
+      setPresenceLine(null);
+      setIntro("");
+      setTourIndex(0);
+      // Dock to center first — outfit waits 1s after she's fixed there.
+      setPos(tourCenterPos(W_TOUR, H_TOUR, EDGE));
+      const lookId = window.setTimeout(() => {
+        millieRef.current?.setTourLook(true);
+        millieRef.current?.react("excited", 2.6, 1);
+        millieRef.current?.play("celebrate");
+        const stepId = window.setTimeout(() => {
+          applyTourStep(0);
+          if (autoTour.current) scheduleAutoAdvance(0);
+        }, 800);
+        tourTimers.current.push(stepId);
+      }, 1000);
+      tourTimers.current.push(lookId);
+    },
+    [pos, desk, applyTourStep, clearTourTimers, scheduleAutoAdvance]
+  );
 
   const goTour = useCallback(
     (next: number) => {
+      // Manual nav cancels /autotour pacing.
+      autoTour.current = false;
+      clearTourTimers();
       if (next < 0) return;
       if (next >= TOUR_STEPS.length) {
         endTour();
@@ -241,7 +282,7 @@ export function MillieOverlay({ deviceId }: Props) {
       setTourIndex(next);
       applyTourStep(next);
     },
-    [applyTourStep, endTour]
+    [applyTourStep, endTour, clearTourTimers]
   );
 
   const setOpenPersist = useCallback(
@@ -392,6 +433,10 @@ export function MillieOverlay({ deviceId }: Props) {
                 e.preventDefault();
                 const text = draft;
                 setDraft("");
+                if (isAutoTourCommand(text)) {
+                  startTour({ auto: true });
+                  return;
+                }
                 if (isTourCommand(text)) {
                   startTour();
                   return;
@@ -412,7 +457,7 @@ export function MillieOverlay({ deviceId }: Props) {
                   Stop
                 </button>
               ) : (
-                <button type="submit" disabled={!draft.trim() || (!deviceId && !isTourCommand(draft))}>
+                <button type="submit" disabled={!draft.trim() || (!deviceId && !isAnyTourCommand(draft))}>
                   Ask
                 </button>
               )}

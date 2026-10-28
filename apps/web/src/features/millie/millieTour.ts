@@ -174,6 +174,19 @@ export function isTourCommand(raw: string): boolean {
   return false;
 }
 
+/** Hands-free walkthrough — each step advances after at most AUTO_TOUR_STEP_MS. */
+export const AUTO_TOUR_STEP_MS = 5_000;
+
+export function isAutoTourCommand(raw: string): boolean {
+  const t = raw.trim().toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+  return t === "/autotour" || t === "autotour";
+}
+
+/** Any tour kickoff that should bypass the board requirement. */
+export function isAnyTourCommand(raw: string): boolean {
+  return isTourCommand(raw) || isAutoTourCommand(raw);
+}
+
 /** Room above the dock for Millie's dialogue bubble (must stay on-screen). */
 export const TOUR_BUBBLE_ROOM = 158;
 

@@ -41,8 +41,8 @@ export const MILLIE_INTRO: Record<"es" | "en", string> = {
 };
 
 export const MILLIE_PLACEHOLDER: Record<"es" | "en", { ready: string; noBoard: string }> = {
-  es: { ready: "Pregúntame algo… o escribe /tour", noBoard: "Elige un board primero… o escribe /tour" },
-  en: { ready: "Ask me anything… or type /tour", noBoard: "Pick a board first… or type /tour" },
+  es: { ready: "Pregúntame… /tour o /autotour", noBoard: "Elige un board… o /tour /autotour" },
+  en: { ready: "Ask me… /tour or /autotour", noBoard: "Pick a board… or /tour /autotour" },
 };
 
 export function pickSafeClip(name: string, fallback: SafeClip = "idle"): SafeClip {
