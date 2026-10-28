@@ -1,7 +1,7 @@
 .overlay {
   position: fixed;
   z-index: 80;
-  width: min(220px, calc(100vw - 24px));
+  width: min(200px, calc(100vw - 24px));
   border: 0;
   background: transparent;
   box-shadow: none;

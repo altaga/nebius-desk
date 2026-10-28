@@ -17,6 +17,9 @@ import {
   type MilliePos,
 } from "./millieStorage";
 import {
+  AUTO_TOUR_CENTER_MS,
+  AUTO_TOUR_GRACE_MS,
+  AUTO_TOUR_JACKET_MS,
   AUTO_TOUR_STEP_MS,
   isAnyTourCommand,
   isAutoTourCommand,
@@ -32,10 +35,10 @@ import { useMilliePresence } from "./useMilliePresence";
 import { MILLIE_INTRO, MILLIE_PLACEHOLDER } from "./safeMotion";
 import styles from "./MillieOverlay.module.css";
 
-const W = 220;
+const W = 200;
 const W_TOUR = 320;
 /** Anchor only (canvas + ask) — bubble grows above and must not affect this. */
-const H_ANCHOR = 220;
+const H_ANCHOR = 250;
 /** Canvas (~328) + tour bar (~48) + gap — keep clamp/dock math in sync. */
 const H_TOUR = 400;
 const EDGE = 8;
@@ -255,32 +258,31 @@ export function MillieOverlay({ deviceId }: Props) {
       setTourIndex(0);
       setPos(tourCenterPos(W_TOUR, H_TOUR, EDGE));
 
-      // /autotour beat: 1s center → jacket anim → 1s grace → then 5s/step flow.
+      // /autotour: short center → jacket → grace → 5s/step (same order, snappier).
       if (isAuto) {
-        const JACKET_MS = 800; // matches setTourLook on-duration (~0.75s)
         const centerId = window.setTimeout(() => {
           millieRef.current?.setTourLook(true);
-          millieRef.current?.react("excited", 2.2, 1);
+          millieRef.current?.react("excited", 1.6, 1);
           const afterJacket = window.setTimeout(() => {
             const graceId = window.setTimeout(() => {
               applyTourStep(0);
               scheduleAutoAdvance(0);
-            }, 1000);
+            }, AUTO_TOUR_GRACE_MS);
             tourTimers.current.push(graceId);
-          }, JACKET_MS);
+          }, AUTO_TOUR_JACKET_MS);
           tourTimers.current.push(afterJacket);
-        }, 1000);
+        }, AUTO_TOUR_CENTER_MS);
         tourTimers.current.push(centerId);
         return;
       }
 
       const lookId = window.setTimeout(() => {
         millieRef.current?.setTourLook(true);
-        millieRef.current?.react("excited", 2.6, 1);
+        millieRef.current?.react("excited", 2.0, 1);
         millieRef.current?.play("celebrate");
-        const stepId = window.setTimeout(() => applyTourStep(0), 800);
+        const stepId = window.setTimeout(() => applyTourStep(0), AUTO_TOUR_JACKET_MS);
         tourTimers.current.push(stepId);
-      }, 1000);
+      }, AUTO_TOUR_CENTER_MS);
       tourTimers.current.push(lookId);
     },
     [pos, desk, applyTourStep, clearTourTimers, scheduleAutoAdvance]

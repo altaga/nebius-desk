@@ -118,7 +118,8 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         const w = host.clientWidth || 280;
         const h = host.clientHeight || 240;
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-        renderer.setSize(w, h, false);
+        // true = sync CSS size to buffer so the figure isn't stretched/squashed.
+        renderer.setSize(w, h, true);
         camera.aspect = w / h;
         camera.updateProjectionMatrix();
         fitCamera();

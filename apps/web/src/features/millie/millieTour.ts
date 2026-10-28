@@ -176,6 +176,10 @@ export function isTourCommand(raw: string): boolean {
 
 /** Hands-free walkthrough — each step advances after at most AUTO_TOUR_STEP_MS. */
 export const AUTO_TOUR_STEP_MS = 5_000;
+/** /autotour intro beat (keep in sync with setTourLook on-duration). */
+export const AUTO_TOUR_CENTER_MS = 400;
+export const AUTO_TOUR_JACKET_MS = 400;
+export const AUTO_TOUR_GRACE_MS = 400;
 
 export function isAutoTourCommand(raw: string): boolean {
   const t = raw.trim().toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");

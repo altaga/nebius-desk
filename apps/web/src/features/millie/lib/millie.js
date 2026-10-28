@@ -341,8 +341,8 @@ export class MillieController {
     }
     const was = this._tourLook?.on;
     let t0 = 0;
-    if (this._tourLook && was === !on) t0 = Math.max(0, 1 - this._tourLook.t / this._tourLook.dur) * (on ? 0.75 : 0.55);
-    this._tourLook = { on: !!on, t: t0, dur: on ? 0.75 : 0.55, jacketStep: 0 };
+    if (this._tourLook && was === !on) t0 = Math.max(0, 1 - this._tourLook.t / this._tourLook.dur) * (on ? 0.4 : 0.3);
+    this._tourLook = { on: !!on, t: t0, dur: on ? 0.4 : 0.3, jacketStep: 0 };
     if (g && this._glassesHome) {
       g.visible = true;
       if (on && t0 === 0) {
