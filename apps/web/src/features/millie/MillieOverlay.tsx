@@ -23,11 +23,11 @@ import { MILLIE_INTRO, MILLIE_PLACEHOLDER } from "./safeMotion";
 import styles from "./MillieOverlay.module.css";
 
 const W = 260;
-const W_TOUR = 300;
+const W_TOUR = 340;
 /** Anchor only (canvas + ask) — bubble grows above and must not affect this. */
 const H_ANCHOR = 280;
-/** Canvas (~300) + tour bar (~48) + gap — keep clamp/dock math in sync. */
-const H_TOUR = 360;
+/** Canvas (~340) + tour bar (~48) + gap — keep clamp/dock math in sync. */
+const H_TOUR = 420;
 const EDGE = 8;
 /** Guide replies + greeting auto-hide; tour steps and errors stay. */
 const REPLY_LINE_MS = 15_000;

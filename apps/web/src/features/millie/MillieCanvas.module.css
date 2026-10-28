@@ -10,10 +10,10 @@
   pointer-events: none;
 }
 
-/* Tour: taller stage so full figure (feet) sits above the nav bar. */
+/* Tour: slightly larger figure so she reads between bubble + tour bar. */
 :global([data-tour]) .canvas {
-  height: min(300px, 44dvh);
-  min-height: 260px;
+  height: min(348px, 52dvh);
+  min-height: 300px;
 }
 
 .canvas canvas {

@@ -12,7 +12,7 @@
 
 .overlay[data-tour] {
   z-index: 100;
-  width: min(300px, calc(100vw - 24px));
+  width: min(340px, calc(100vw - 24px));
   /* Soft slide between steps — hard teleports read as jumping. */
   transition: left 420ms cubic-bezier(0.22, 1, 0.36, 1), top 420ms cubic-bezier(0.22, 1, 0.36, 1),
     width 280ms ease;
