@@ -369,6 +369,8 @@ export class MillieController {
   _setLeather(on) {
     this.colors?.setLeather?.(on);
     for (const s of this._ensureLeatherShell()) s.visible = !!on;
+    this._puffAnim = on ? { t: 0 } : null;
+    this._setShoulderPuff(0);
   }
   /**
    * Jacket-only overlay sharing the body skeleton, with a glossy matcap + cool rim so
@@ -380,6 +382,7 @@ export class MillieController {
     const A = this.colors?.atlas?.body, ids = this.colors?.ids;
     if (!A?.label || !ids) return [];
     this._leatherShell = [];
+    this._shoulderPuffs = [];
     const keep = new Set([ids.jacket, ids.jacket_trim, ids.jacket_glow]);
     const found = [];
     this.vrm.scene.traverse((o) => {
@@ -406,6 +409,8 @@ export class MillieController {
       g2.morphAttributes = geo.morphAttributes;
       g2.morphTargetsRelative = geo.morphTargetsRelative;
       g2.setIndex(new THREE.BufferAttribute(new idx.constructor(tri), 1));
+      const puff = this._buildShoulderPuff(o, tri);
+      if (puff) { g2.setAttribute('position', puff.attr); this._shoulderPuffs.push(puff); }
       const srcMat = [].concat(o.material)[mi];
       const m = new srcMat.constructor();
       m.copy(srcMat);
@@ -434,6 +439,48 @@ export class MillieController {
       this._leatherShell.push(s);
     }
     return this._leatherShell;
+  }
+  /**
+   * Oversized shoulder pads: jacket vertices around each upper-arm head are pushed out
+   * and up (bind space, position-only so UV seams stay closed). Own position buffer,
+   * so the body underneath is untouched; it shows the same leather through any gap.
+   */
+  _buildShoulderPuff(o, tri) {
+    const pos = o.geometry.attributes.position;
+    if (!pos || pos.isInterleavedBufferAttribute) return null;
+    const pt = (name) => {
+      const i = o.skeleton.bones.indexOf(this.h.getRawBoneNode(name));
+      return i < 0 ? null : new THREE.Vector3().setFromMatrixPosition(new THREE.Matrix4().copy(o.skeleton.boneInverses[i]).invert());
+    };
+    const L = pt('leftUpperArm'), R = pt('rightUpperArm');
+    if (!L || !R) return null;
+    const span = L.distanceTo(R), rad = span * 0.34, mid = L.clone().add(R).multiplyScalar(0.5);
+    const toLocal = new THREE.Matrix3().setFromMatrix4(o.bindMatrixInverse);
+    const base = Float32Array.from(pos.array), off = new Float32Array(base.length);
+    const v = new THREE.Vector3(), dir = new THREE.Vector3(), lat = new THREE.Vector3();
+    const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+    for (const vi of new Set(tri)) {
+      v.fromBufferAttribute(pos, vi).applyMatrix4(o.bindMatrix);
+      for (const S of [L, R]) {
+        const d = v.distanceTo(S); if (d >= rad) continue;
+        const w = sm(rad, rad * 0.25, d) * sm(S.y - rad * 0.55, S.y + rad * 0.15, v.y);
+        if (w <= 0) continue;
+        dir.subVectors(v, S).normalize();
+        lat.set(S.x - mid.x, 0, 0).normalize();
+        dir.multiplyScalar(0.1).add(lat.multiplyScalar(0.07)).addScaledVector(new THREE.Vector3(0, 1, 0), 0.07)
+          .multiplyScalar(span * w).applyMatrix3(toLocal);
+        off[vi * 3] += dir.x; off[vi * 3 + 1] += dir.y; off[vi * 3 + 2] += dir.z;
+      }
+    }
+    const attr = new THREE.BufferAttribute(Float32Array.from(base), 3);
+    return { attr, base, off };
+  }
+  _setShoulderPuff(k) {
+    for (const p of this._shoulderPuffs || []) {
+      const a = p.attr.array;
+      for (let i = 0; i < a.length; i++) a[i] = p.base[i] + p.off[i] * k;
+      p.attr.needsUpdate = true;
+    }
   }
   /** Additive matcap: tight specular, broad cool lobe, grazing edge — semi-gloss leather. */
   _makeLeatherMatcap() {
@@ -609,6 +656,13 @@ export class MillieController {
   }
   /** Soft slide-on glasses + staged jacket-only palette. */
   _updateTourLook(dt) {
+    const pa = this._puffAnim;
+    if (pa) {
+      pa.t += dt;
+      const x = clamp(pa.t / 0.45, 0, 1) - 1;
+      this._setShoulderPuff(1 + 2.70158 * x * x * x + 1.70158 * x * x);
+      if (x >= 0) this._puffAnim = null;
+    }
     const a = this._tourLook;
     const g = this._tourGlasses;
     // Keep frames locked to the eyes after look-at / head pose resolve.
