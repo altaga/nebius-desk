@@ -29,8 +29,8 @@ function L(es: string, en: string): Record<TourLang, string> {
 export const TOUR_STEPS: TourStep[] = [
   {
     id: "hello",
-    label: L("Millie", "Millie"),
-    title: L("Hola, soy Millie", "Hi, I'm Millie"),
+    label: L("Millie (Huang)", "Millie (Huang)"),
+    title: L("Hola, soy Millie (Huang)", "Hi, I'm Millie (Huang)"),
     body: L("Te enseño el desk en 1 minuto.", "Quick 1-minute desk tour."),
     emotion: "excited",
     clip: "wave",

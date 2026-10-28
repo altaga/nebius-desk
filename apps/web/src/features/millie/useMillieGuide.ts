@@ -183,7 +183,7 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
               const actions = gateActions(event.actions?.length ? event.actions : queued.length ? queued : parsed.actions);
               let cleaned = parsed.text || (actions.length ? captionFromActions(actions) : "");
               if (cleaned && !notEcho(cleaned)) {
-                cleaned = actions.length ? captionFromActions(actions) : "Hey! I'm Millie — what do you need?";
+                cleaned = actions.length ? captionFromActions(actions) : "Hey! I'm Millie (Huang) — what do you need?";
               }
               const emotion = emotionFromActions(actions) || reactionForGuide(cleaned);
               setPending("");

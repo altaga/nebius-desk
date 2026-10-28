@@ -36,13 +36,13 @@ const REACT_SET = new Set<string>(SAFE_REACTIONS);
 
 /** Opening line — local UI chrome, not a Nano reply. */
 export const MILLIE_INTRO: Record<"es" | "en", string> = {
-  es: "¡Hola, soy Millie! Me sé este desk de memoria. Pídeme que te encuentre o abra lo que sea.",
-  en: "Hey, I'm Millie! I know this desk inside out. Ask me to find or open anything.",
+  es: "¡Hola, soy Millie (Huang)! Me sé este desk de memoria. Pídeme que te encuentre o abra lo que sea.",
+  en: "Hey, I'm Millie (Huang)! I know this desk inside out. Ask me to find or open anything.",
 };
 
 export const MILLIE_PLACEHOLDER: Record<"es" | "en", { ready: string; noBoard: string }> = {
-  es: { ready: "Pregúntame… /tour o /autotour", noBoard: "Elige un board… o /tour /autotour" },
-  en: { ready: "Ask me… /tour or /autotour", noBoard: "Pick a board… or /tour /autotour" },
+  es: { ready: "Pregúntame lo que sea sobre Nebius Desk", noBoard: "Elige un board para empezar" },
+  en: { ready: "Ask me anything about Nebius Desk", noBoard: "Pick a board to get started" },
 };
 
 export function pickSafeClip(name: string, fallback: SafeClip = "idle"): SafeClip {

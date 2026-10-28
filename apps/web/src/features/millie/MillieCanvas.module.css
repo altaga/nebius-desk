@@ -12,8 +12,8 @@
 }
 
 :global([data-tour]) .canvas {
-  height: min(328px, 50dvh);
-  min-height: 290px;
+  height: min(352px, 52dvh);
+  min-height: 310px;
 }
 
 .canvas canvas {
