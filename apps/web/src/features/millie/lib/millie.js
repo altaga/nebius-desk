@@ -319,27 +319,125 @@ export class MillieController {
    * On = tumble-on glasses + staged darken; off = fly-away + restore Nebius.
    */
   setTourLook(on) {
+    // Drop legacy box-geometry glasses if a prior session built them.
+    if (this._tourGlasses && this._glassesRev !== 3) {
+      this._tourGlasses.parent?.remove(this._tourGlasses);
+      this._tourGlasses.traverse?.((o) => {
+        o.geometry?.dispose?.();
+        const m = o.material;
+        if (m) { m.map?.dispose?.(); m.dispose?.(); }
+      });
+      this._tourGlasses = null;
+      this._glassesHome = null;
+    }
     const g = this._ensureTourGlasses();
     const was = this._tourLook?.on;
-    // Reverse mid-flight if the user toggles again.
     let t0 = 0;
-    if (this._tourLook && was === !on) t0 = Math.max(0, 1 - this._tourLook.t / this._tourLook.dur) * (on ? 0.85 : 0.7);
-    this._tourLook = {
-      on: !!on,
-      t: t0,
-      dur: on ? 0.9 : 0.75,
-      jacketStep: 0,
-      spin: on ? 1 : -1,
-    };
+    if (this._tourLook && was === !on) t0 = Math.max(0, 1 - this._tourLook.t / this._tourLook.dur) * (on ? 0.75 : 0.55);
+    this._tourLook = { on: !!on, t: t0, dur: on ? 0.75 : 0.55, jacketStep: 0 };
     if (g && this._glassesHome) {
       g.visible = true;
       if (on && t0 === 0) {
-        g.scale.setScalar(0.05);
+        g.scale.setScalar(0.92);
         g.position.copy(this._glassesHome.pos);
-        g.position.y += 0.09;
+        g.position.y += 0.028;
+        if (this._glassesMat) this._glassesMat.opacity = 0;
       }
     }
     return this;
+  }
+  /** Hi-res canvas sprite: thin black rectangular frames (Jensen Huang signature). */
+  _makeJensenGlassesTexture() {
+    const W = 1024, H = 420;
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    const roundRect = (x, y, w, h, r) => {
+      const rr = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+    };
+
+    // Layout: two lenses + thin bridge (Jensen proportions — wide, low rectangles).
+    const padX = 70, padY = 70;
+    const bridgeW = 56;
+    const frameW = (W - padX * 2 - bridgeW) / 2;
+    const frameH = 210;
+    const stroke = 14; // thin acetate rim
+    const r = 18;
+    const y0 = (H - frameH) / 2;
+    const leftX = padX;
+    const rightX = padX + frameW + bridgeW;
+
+    const drawLens = (x) => {
+      // Glass tint
+      roundRect(x + stroke * 0.55, y0 + stroke * 0.55, frameW - stroke * 1.1, frameH - stroke * 1.1, r * 0.7);
+      const glass = ctx.createLinearGradient(x, y0, x + frameW, y0 + frameH);
+      glass.addColorStop(0, 'rgba(30, 36, 48, 0.22)');
+      glass.addColorStop(0.45, 'rgba(18, 22, 30, 0.10)');
+      glass.addColorStop(1, 'rgba(8, 10, 16, 0.28)');
+      ctx.fillStyle = glass;
+      ctx.fill();
+      // Soft specular
+      roundRect(x + stroke * 1.2, y0 + stroke * 1.1, frameW * 0.42, frameH * 0.28, 10);
+      ctx.fillStyle = 'rgba(255,255,255,0.14)';
+      ctx.fill();
+      // Outer rim
+      roundRect(x, y0, frameW, frameH, r);
+      ctx.strokeStyle = '#0a0a0c';
+      ctx.lineWidth = stroke;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      // Inner rim highlight (thin)
+      roundRect(x + stroke * 0.55, y0 + stroke * 0.55, frameW - stroke * 1.1, frameH - stroke * 1.1, r * 0.7);
+      ctx.strokeStyle = 'rgba(55,55,62,0.55)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    };
+
+    drawLens(leftX);
+    drawLens(rightX);
+
+    // Bridge
+    const by = y0 + frameH * 0.38;
+    ctx.strokeStyle = '#0a0a0c';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(leftX + frameW - 2, by);
+    ctx.quadraticCurveTo(W / 2, by - 10, rightX + 2, by);
+    ctx.stroke();
+    // Nose pads (tiny)
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(leftX + frameW - 6, by + 6);
+    ctx.lineTo(leftX + frameW + 8, by + 22);
+    ctx.moveTo(rightX + 6, by + 6);
+    ctx.lineTo(rightX - 8, by + 22);
+    ctx.stroke();
+
+    // Short temple hints (perspective stubs)
+    ctx.lineWidth = 10;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(leftX + 4, y0 + frameH * 0.42);
+    ctx.lineTo(leftX - 36, y0 + frameH * 0.4);
+    ctx.moveTo(rightX + frameW - 4, y0 + frameH * 0.42);
+    ctx.lineTo(rightX + frameW + 36, y0 + frameH * 0.4);
+    ctx.stroke();
+
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    return tex;
   }
   _ensureTourGlasses() {
     if (this._tourGlasses) return this._tourGlasses;
@@ -347,80 +445,47 @@ export class MillieController {
     if (!head) return null;
     head.updateWorldMatrix(true, false);
 
-    // Unlit + no depth test: bangs/eye cards otherwise bury the frames on this chibi.
-    const frameMat = new THREE.MeshBasicMaterial({ color: 0x050508, depthTest: false });
-    const lensMat = new THREE.MeshBasicMaterial({
-      color: 0x1a1a22, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthTest: false, depthWrite: false,
-    });
-
     const le = this.bone('leftEye'), re = this.bone('rightEye');
     let mid = new THREE.Vector3(0, 0.06, 0.05 * this.s0);
-    let half = 0.038;
+    let span = 0.078;
     if (le && re) {
       const lp = head.worldToLocal(le.getWorldPosition(new THREE.Vector3()));
       const rp = head.worldToLocal(re.getWorldPosition(new THREE.Vector3()));
       mid = lp.clone().add(rp).multiplyScalar(0.5);
-      half = Math.max(Math.abs(lp.x - rp.x) * 0.55, 0.032);
+      span = Math.max(Math.abs(lp.x - rp.x), 0.055);
     }
-    // Push past the eye cards / lashes so rims aren't buried in the face mesh.
     const out = mid.clone();
-    out.y *= 0.15;
+    out.y *= 0.12;
     if (out.lengthSq() < 1e-8) out.set(0, 0, this.s0);
     else out.normalize();
-    mid.addScaledVector(out, 0.055);
+    mid.addScaledVector(out, 0.05);
 
-    // Jensen-style: oversized rectangular frames relative to eye span.
-    const lensW = half * 1.55, lensH = lensW * 0.62, thick = Math.max(lensW * 0.18, 0.0055), depth = thick * 1.35;
-    const tag = (mesh) => {
-      mesh.frustumCulled = false;
-      mesh.renderOrder = 20;
-      return mesh;
-    };
-    const rim = (ox) => {
-      const g = new THREE.Group();
-      const top = tag(new THREE.Mesh(new THREE.BoxGeometry(lensW + thick, thick, depth), frameMat));
-      top.position.y = lensH * 0.5;
-      const bot = tag(new THREE.Mesh(new THREE.BoxGeometry(lensW + thick, thick * 0.9, depth), frameMat));
-      bot.position.y = -lensH * 0.5;
-      const L = tag(new THREE.Mesh(new THREE.BoxGeometry(thick, lensH, depth), frameMat));
-      L.position.x = -lensW * 0.5;
-      const R = tag(new THREE.Mesh(new THREE.BoxGeometry(thick, lensH, depth), frameMat));
-      R.position.x = lensW * 0.5;
-      const lens = tag(new THREE.Mesh(new THREE.PlaneGeometry(lensW * 0.9, lensH * 0.86), lensMat));
-      lens.position.z = depth * 0.2;
-      g.add(top, bot, L, R, lens);
-      g.position.set(ox, 0, 0);
-      return g;
-    };
+    const tex = this._makeJensenGlassesTexture();
+    const mat = new THREE.MeshBasicMaterial({
+      map: tex, transparent: true, depthTest: false, depthWrite: false,
+      side: THREE.DoubleSide, opacity: 1,
+    });
+    // Wide plane — Jensen frames sit larger than the iris span on a chibi face.
+    const planeW = span * 3.15;
+    const planeH = planeW * (420 / 1024);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
+    mesh.frustumCulled = false;
+    mesh.renderOrder = 30;
+    mesh.name = 'MillieTourGlasses';
 
-    const group = new THREE.Group();
-    group.name = 'MillieTourGlasses';
-    group.frustumCulled = false;
-    group.add(rim(-half * 1.12), rim(half * 1.12));
-    const bridge = tag(new THREE.Mesh(new THREE.BoxGeometry(half * 0.42, thick * 0.75, depth * 0.85), frameMat));
-    group.add(bridge);
-    const armLen = half * 1.85, armY = lensH * 0.12;
-    for (const sx of [-1, 1]) {
-      const arm = tag(new THREE.Mesh(new THREE.BoxGeometry(thick * 0.75, thick * 0.75, armLen), frameMat));
-      // Temples go back into the head (opposite face-out).
-      arm.position.set(sx * (half * 1.12 + lensW * 0.5), armY, -out.z >= 0 ? -armLen * 0.42 : armLen * 0.42);
-      // Align arm length with face-out axis in local Z of the group (built facing +Z).
-      arm.position.z = -armLen * 0.42;
-      group.add(arm);
-    }
-    // Orient group so local +Z points out of the face.
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), out.clone().normalize());
-    group.position.copy(mid);
-    group.quaternion.copy(q);
-    group.visible = false;
-    group.scale.setScalar(1);
-    head.add(group);
+    mesh.position.copy(mid);
+    mesh.quaternion.copy(q);
+    mesh.visible = false;
+    head.add(mesh);
+
+    this._glassesRev = 3;
     this._glassesHome = { pos: mid.clone(), quat: q.clone() };
-    this._tourGlasses = group;
-    this._glassesLensMat = lensMat;
-    return group;
+    this._tourGlasses = mesh;
+    this._glassesMat = mat;
+    return mesh;
   }
-  /** Drive glasses tumble + staged jacket palette (not every-frame recolor). */
+  /** Soft slide-on glasses + staged jacket-only palette. */
   _updateTourLook(dt) {
     const a = this._tourLook;
     if (!a) return;
@@ -430,53 +495,34 @@ export class MillieController {
     const home = this._glassesHome;
     if (g && home) {
       if (a.on) {
-        // Drop from above, double spin, squash-bounce land.
-        const land = smoother(clamp(u / 0.72, 0, 1));
-        const bounce = u < 0.72 ? 0 : Math.sin(((u - 0.72) / 0.28) * Math.PI) * 0.12 * (1 - (u - 0.72) / 0.28);
-        const sc = land < 1
-          ? 0.05 + land * 1.2
-          : 1.25 - bounce * 0.8;
-        const settled = u >= 1 ? 1 : (land >= 1 ? 1.08 - bounce * 0.5 : sc);
-        g.scale.set(settled * (1 + bounce * 0.35), settled * (1 - bounce * 0.45), settled);
+        const land = smoother(u);
+        const over = Math.sin(land * Math.PI) * 0.04 * (1 - land);
+        const sc = 0.92 + land * 0.1 - over;
+        g.scale.setScalar(sc);
         g.position.copy(home.pos);
-        g.position.y += (1 - land) * 0.1 + bounce * 0.012;
-        g.position.x += Math.sin(land * Math.PI * 2) * 0.012 * (1 - land);
-        const spin = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-          land * Math.PI * 2 * a.spin,
-          land * Math.PI * 2.4 * a.spin,
-          (1 - land) * 0.4 * a.spin,
-        ));
-        g.quaternion.copy(home.quat).multiply(spin);
-        if (this._glassesLensMat) this._glassesLensMat.opacity = 0.08 + land * 0.34;
+        g.position.y += (1 - land) * 0.03;
+        g.quaternion.copy(home.quat);
+        if (this._glassesMat) this._glassesMat.opacity = land;
       } else {
-        // Flip up, shrink, spin away.
         const lift = smoother(u);
-        const sc = 1 - lift * 0.95;
-        g.scale.set(sc * (1 + lift * 0.4), sc * (1 - lift * 0.2), sc);
+        g.scale.setScalar(1 - lift * 0.12);
         g.position.copy(home.pos);
-        g.position.y += lift * 0.12;
-        g.position.x += Math.sin(lift * Math.PI * 3) * 0.04 * lift;
-        const spin = new THREE.Quaternion().setFromEuler(new THREE.Euler(
-          -lift * Math.PI * 1.6,
-          lift * Math.PI * 3.2 * a.spin,
-          lift * Math.PI * 0.5,
-        ));
-        g.quaternion.copy(home.quat).multiply(spin);
-        if (this._glassesLensMat) this._glassesLensMat.opacity = 0.42 * (1 - lift);
+        g.position.y += lift * 0.04;
+        g.quaternion.copy(home.quat);
+        if (this._glassesMat) this._glassesMat.opacity = 1 - lift;
       }
     }
-    // Jacket only: 2 discrete snaps (atlas rebuild is expensive — never every frame).
     if (this.colors) {
       if (a.on) {
-        if (a.jacketStep < 1 && u >= 0.22) {
+        if (a.jacketStep < 1 && u >= 0.2) {
           this.colors.setPalette({ jacket: '#4a4a52', jacket_trim: '#3a3a42', jacket_glow: '#2a2a30' });
           a.jacketStep = 1;
         }
-        if (a.jacketStep < 2 && u >= 0.48) {
+        if (a.jacketStep < 2 && u >= 0.45) {
           this.colors.setPalette('huang');
           a.jacketStep = 2;
         }
-      } else if (a.jacketStep < 1 && u >= 0.28) {
+      } else if (a.jacketStep < 1 && u >= 0.25) {
         this.colors.reset();
         a.jacketStep = 1;
       }
@@ -487,13 +533,13 @@ export class MillieController {
           g.position.copy(home.pos);
           g.quaternion.copy(home.quat);
           g.scale.setScalar(1);
-          if (this._glassesLensMat) this._glassesLensMat.opacity = 0.42;
+          if (this._glassesMat) this._glassesMat.opacity = 1;
         } else {
           g.visible = false;
           g.scale.setScalar(1);
           g.position.copy(home.pos);
           g.quaternion.copy(home.quat);
-          if (this._glassesLensMat) this._glassesLensMat.opacity = 0.42;
+          if (this._glassesMat) this._glassesMat.opacity = 1;
         }
       }
       if (a.on && this.colors && a.jacketStep < 2) this.colors.setPalette('huang');
