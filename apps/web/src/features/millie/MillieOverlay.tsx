@@ -45,6 +45,7 @@ export function MillieOverlay({ deviceId }: Props) {
   const [ready, setReady] = useState(false);
   const drag = useRef<{ ox: number; oy: number; px: number; py: number } | null>(null);
   const savedPos = useRef<MilliePos | null>(null);
+  const tourTimers = useRef<number[]>([]);
   const guide = useMillieGuide(deviceId, millieRef);
   const desk = useDeskGuide();
   const [draft, setDraft] = useState("");
@@ -190,7 +191,15 @@ export function MillieOverlay({ deviceId }: Props) {
     [desk, presenceLang]
   );
 
+  const clearTourTimers = useCallback(() => {
+    for (const id of tourTimers.current) window.clearTimeout(id);
+    tourTimers.current = [];
+  }, []);
+
+  useEffect(() => () => clearTourTimers(), [clearTourTimers]);
+
   const endTour = useCallback(() => {
+    clearTourTimers();
     setTourIndex(null);
     desk.setTourActive(false);
     millieRef.current?.setTourLook(false);
@@ -201,21 +210,26 @@ export function MillieOverlay({ deviceId }: Props) {
     writeMilliePos(restore);
     millieRef.current?.react("happy", 2.4, 1);
     millieRef.current?.play("bow");
-  }, [desk]);
+  }, [desk, clearTourTimers]);
 
   const startTour = useCallback(() => {
+    clearTourTimers();
     savedPos.current = pos;
     desk.setTourActive(true);
     setPresenceLine(null);
     setIntro("");
     setTourIndex(0);
+    // Dock to center first — outfit waits 1s after she's fixed there.
     setPos(tourCenterPos(W_TOUR, H_TOUR, EDGE));
-    millieRef.current?.setTourLook(true);
-    millieRef.current?.react("excited", 2.6, 1);
-    millieRef.current?.play("celebrate");
-    // Let jacket/glasses land before the first spotlight.
-    window.setTimeout(() => applyTourStep(0), 720);
-  }, [pos, desk, applyTourStep]);
+    const lookId = window.setTimeout(() => {
+      millieRef.current?.setTourLook(true);
+      millieRef.current?.react("excited", 2.6, 1);
+      millieRef.current?.play("celebrate");
+      const stepId = window.setTimeout(() => applyTourStep(0), 800);
+      tourTimers.current.push(stepId);
+    }, 1000);
+    tourTimers.current.push(lookId);
+  }, [pos, desk, applyTourStep, clearTourTimers]);
 
   const goTour = useCallback(
     (next: number) => {

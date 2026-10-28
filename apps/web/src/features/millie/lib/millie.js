@@ -319,8 +319,8 @@ export class MillieController {
    * On = tumble-on glasses + staged darken; off = fly-away + restore Nebius.
    */
   setTourLook(on) {
-    // Drop legacy box-geometry glasses if a prior session built them.
-    if (this._tourGlasses && this._glassesRev !== 3) {
+    // Drop older glasses meshes (box / mis-fitted sprite revs).
+    if (this._tourGlasses && this._glassesRev !== 4) {
       this._tourGlasses.parent?.remove(this._tourGlasses);
       this._tourGlasses.traverse?.((o) => {
         o.geometry?.dispose?.();
@@ -331,6 +331,7 @@ export class MillieController {
       this._glassesHome = null;
     }
     const g = this._ensureTourGlasses();
+    this._fitGlassesToEyes();
     const was = this._tourLook?.on;
     let t0 = 0;
     if (this._tourLook && was === !on) t0 = Math.max(0, 1 - this._tourLook.t / this._tourLook.dur) * (on ? 0.75 : 0.55);
@@ -338,9 +339,9 @@ export class MillieController {
     if (g && this._glassesHome) {
       g.visible = true;
       if (on && t0 === 0) {
-        g.scale.setScalar(0.92);
+        g.scale.setScalar(0.94);
         g.position.copy(this._glassesHome.pos);
-        g.position.y += 0.028;
+        g.position.y += 0.02;
         if (this._glassesMat) this._glassesMat.opacity = 0;
       }
     }
@@ -439,75 +440,92 @@ export class MillieController {
     tex.needsUpdate = true;
     return tex;
   }
-  _ensureTourGlasses() {
-    if (this._tourGlasses) return this._tourGlasses;
+  /** Head-local pose on the nose bridge, facing out in XZ only (no forehead lift). */
+  _fitGlassesToEyes() {
     const head = this.bone('head');
-    if (!head) return null;
+    if (!head || !this._tourGlasses) return null;
     head.updateWorldMatrix(true, false);
-
     const le = this.bone('leftEye'), re = this.bone('rightEye');
-    let mid = new THREE.Vector3(0, 0.06, 0.05 * this.s0);
-    let span = 0.078;
+    let mid = new THREE.Vector3(0, 0.042, 0.055 * this.s0);
+    let span = 0.07;
     if (le && re) {
       const lp = head.worldToLocal(le.getWorldPosition(new THREE.Vector3()));
       const rp = head.worldToLocal(re.getWorldPosition(new THREE.Vector3()));
       mid = lp.clone().add(rp).multiplyScalar(0.5);
-      span = Math.max(Math.abs(lp.x - rp.x), 0.055);
+      span = Math.max(Math.abs(lp.x - rp.x), 0.05);
     }
-    const out = mid.clone();
-    out.y *= 0.12;
+    const out = new THREE.Vector3(mid.x, 0, mid.z);
     if (out.lengthSq() < 1e-8) out.set(0, 0, this.s0);
-    else out.normalize();
-    mid.addScaledVector(out, 0.05);
+    out.normalize();
+    // Eye bones sit high on this chibi — drop to the visible iris / bridge.
+    mid.y -= span * 0.35;
+    mid.addScaledVector(out, 0.038);
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), out);
+    if (!this._glassesHome) this._glassesHome = { pos: mid.clone(), quat: q.clone() };
+    else { this._glassesHome.pos.copy(mid); this._glassesHome.quat.copy(q); }
+    // Keep plane size matched to current eye span.
+    const planeW = span * 2.85;
+    const planeH = planeW * (420 / 1024);
+    const geom = this._tourGlasses.geometry;
+    if (geom?.parameters && (Math.abs(geom.parameters.width - planeW) > 1e-4)) {
+      geom.dispose();
+      this._tourGlasses.geometry = new THREE.PlaneGeometry(planeW, planeH);
+    }
+    return this._glassesHome;
+  }
+  _ensureTourGlasses() {
+    if (this._tourGlasses) return this._tourGlasses;
+    const head = this.bone('head');
+    if (!head) return null;
 
     const tex = this._makeJensenGlassesTexture();
     const mat = new THREE.MeshBasicMaterial({
-      map: tex, transparent: true, depthTest: false, depthWrite: false,
-      side: THREE.DoubleSide, opacity: 1,
+      map: tex, transparent: true, depthTest: true, depthWrite: false,
+      side: THREE.DoubleSide, opacity: 1, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
     });
-    // Wide plane — Jensen frames sit larger than the iris span on a chibi face.
-    const planeW = span * 3.15;
-    const planeH = planeW * (420 / 1024);
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(planeW, planeH), mat);
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.05), mat);
     mesh.frustumCulled = false;
     mesh.renderOrder = 30;
     mesh.name = 'MillieTourGlasses';
-
-    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), out.clone().normalize());
-    mesh.position.copy(mid);
-    mesh.quaternion.copy(q);
     mesh.visible = false;
     head.add(mesh);
 
-    this._glassesRev = 3;
-    this._glassesHome = { pos: mid.clone(), quat: q.clone() };
+    this._glassesRev = 4;
     this._tourGlasses = mesh;
     this._glassesMat = mat;
+    this._fitGlassesToEyes();
     return mesh;
   }
   /** Soft slide-on glasses + staged jacket-only palette. */
   _updateTourLook(dt) {
     const a = this._tourLook;
-    if (!a) return;
+    const g = this._tourGlasses;
+    // Keep frames locked to the eyes after look-at / head pose resolve.
+    if (g?.visible) this._fitGlassesToEyes();
+    if (!a) {
+      if (g?.visible && this._glassesHome) {
+        g.position.copy(this._glassesHome.pos);
+        g.quaternion.copy(this._glassesHome.quat);
+      }
+      return;
+    }
     a.t += dt;
     const u = clamp(a.t / a.dur, 0, 1);
-    const g = this._tourGlasses;
     const home = this._glassesHome;
     if (g && home) {
       if (a.on) {
         const land = smoother(u);
-        const over = Math.sin(land * Math.PI) * 0.04 * (1 - land);
-        const sc = 0.92 + land * 0.1 - over;
-        g.scale.setScalar(sc);
+        const over = Math.sin(land * Math.PI) * 0.03 * (1 - land);
+        g.scale.setScalar(0.94 + land * 0.08 - over);
         g.position.copy(home.pos);
-        g.position.y += (1 - land) * 0.03;
+        g.position.y += (1 - land) * 0.02;
         g.quaternion.copy(home.quat);
         if (this._glassesMat) this._glassesMat.opacity = land;
       } else {
         const lift = smoother(u);
-        g.scale.setScalar(1 - lift * 0.12);
+        g.scale.setScalar(1 - lift * 0.1);
         g.position.copy(home.pos);
-        g.position.y += lift * 0.04;
+        g.position.y += lift * 0.03;
         g.quaternion.copy(home.quat);
         if (this._glassesMat) this._glassesMat.opacity = 1 - lift;
       }
@@ -564,7 +582,6 @@ export class MillieController {
   }
   update(dt) {
     dt = Math.min(dt, 1 / 20); this.time += dt; const T = this.time, s0 = this.s0;
-    this._updateTourLook(dt);
     // ----- 1) gather additive layer offsets (degrees, authored facing +Z)
     const R = {}, arms = { left: null, right: null }, fing = {}, ex = {}; let hips = [0, 0, 0], look = null, lookW = 0;
     const P = { rot: (b, v, w = 1) => add(R, b, v, w), hips: (v, w = 1) => { hips = hips.map((x, i) => x + v[i] * w); }, expr: (n, w) => { ex[n] = Math.max(ex[n] || 0, w); },
@@ -747,6 +764,8 @@ export class MillieController {
     this._first = false;
     this.vrm.update(dt);
     this._applyRaw();
+    // Glasses after look-at / head pose so frames stay on the eyes while she turns.
+    this._updateTourLook(dt);
   }
   _applyRaw() {   // raw VRoid face morphs used by reactions (after vrm.update so the expression manager does not overwrite them)
     if (!this._rawIdx) { this._rawIdx = []; this.vrm.scene.traverse(o => { if (o.morphTargetDictionary) for (const k in o.morphTargetDictionary) { const m = k.match(/(Fcl_EYE_Joy|Fcl_EYE_Close)$/); if (m) this._rawIdx.push([o, o.morphTargetDictionary[k], m[1]]); } }); }
