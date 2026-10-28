@@ -104,9 +104,9 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         const box = new THREE.Box3().setFromObject(vrm.scene);
         if (box.isEmpty()) return;
         const size = box.getSize(new THREE.Vector3());
-        // Breathing room above head / below feet — don't jam her into the chrome.
+        // Slight head/foot margin — tight enough, chrome stays clear of Millie.
         const targetY = box.min.y + size.y * 0.52;
-        const halfH = (size.y * 1.26) / 2;
+        const halfH = (size.y * 1.16) / 2;
         const dist = halfH / Math.tan((camera.fov * Math.PI) / 360) / Math.max(camera.aspect, 0.5);
         camera.position.set(0, targetY, dist);
         camera.lookAt(0, targetY, 0);
