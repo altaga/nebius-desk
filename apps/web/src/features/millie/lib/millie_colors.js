@@ -16,6 +16,7 @@ export const EXTRA_PRESETS = {
   /** Tour-only: exaggerated black leather — deep body, lit seams, cool sheen. */
   huang: { jacket: '#050508', jacket_trim: '#6a6a78', jacket_glow: '#3a4250' },
 };
+export const LEATHER_REGIONS = ['jacket', 'jacket_trim', 'jacket_glow', 'innershirt'];
 export class MillieColors {
   constructor(vrm, meta, baseUrl = './assets/') { this.vrm = vrm; this.meta = meta; this.base = baseUrl; this.cur = {}; this.dirty = new Set(); this.ready = false; }
   static async load(vrm, url = './assets/millie_regions.json') {
@@ -59,7 +60,7 @@ export class MillieColors {
    */
   setLeather(on) {
     on = !!on; if (this.leather === on) return; this.leather = on;
-    for (const n of ['jacket', 'jacket_trim', 'jacket_glow']) this.dirty.add(n);
+    for (const n of LEATHER_REGIONS) this.dirty.add(n);
     this._schedule();
   }
   /** @deprecated use setLeather(true). */
@@ -68,13 +69,13 @@ export class MillieColors {
   // shading is amplified hard: crushed creases, glints on crease edges, glossy ridges.
   _leatherPass(A, d) {
     const src = A.orig, L = A.label, w = A.w, ids = this.ids;
-    const idJ = ids.jacket, idT = ids.jacket_trim, idG = ids.jacket_glow;
+    const idJ = ids.jacket, idT = ids.jacket_trim, idG = ids.jacket_glow, idS = ids.innershirt;
     const lum = p => (src[p] * 0.2126 + src[p + 1] * 0.7152 + src[p + 2] * 0.0722) / 255;
     const base = {};
-    for (const n of ['jacket', 'jacket_trim', 'jacket_glow']) base[ids[n]] = Math.max(luma(srgb(A.baked[n] || '#e8e8e8')), 1e-3);
+    for (const n of LEATHER_REGIONS) base[ids[n]] = Math.max(luma(srgb(A.baked[n] || '#e8e8e8')), 1e-3);
     const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     for (let i = 0, p = 0; i < L.length; i++, p += 4) {
-      const id = L[i]; if ((id !== idJ && id !== idT && id !== idG) || src[p + 3] === 0) continue;
+      const id = L[i]; if (!(id in base) || src[p + 3] === 0) continue;
       const lb = base[id], t = lum(p) / lb - 1;
       // Crease-edge glint: local luma gradient within the same region.
       let gx = 0, gy = 0;
@@ -84,14 +85,16 @@ export class MillieColors {
       const edge = sm(0.01, 0.06, Math.hypot(gx, gy));
       let v;
       if (id === idJ) {
-        const crease = t < 0 ? Math.max(0.12, 1 + t * 7) : 1;
-        v = 0.07 * crease + 0.5 * sm(0.004, 0.06, t) + 0.16 * edge;
+        const crease = t < 0 ? Math.max(0.2, 1 + t * 6) : 1;
+        v = 0.075 * crease + 0.3 * sm(0.004, 0.06, t) + 0.05 * edge;
+      } else if (id === idS) {
+        // Waist band under the cropped hem reads as the jacket continuing to the belt.
+        v = 0.07 * Math.max(0.45, 1 + t * 1.5);
       } else if (id === idT) {
-        // Gunmetal piping / zipper.
-        v = 0.2 * Math.max(0.25, 1 + t * 3) + 0.45 * sm(0.0, 0.08, t) + 0.12 * edge;
+        // Dark gunmetal zipper / piping, just above the leather.
+        v = 0.11 + 0.12 * sm(0.0, 0.08, t);
       } else {
-        // Former neon stripes become stitched seams.
-        v = 0.15 + 0.2 * sm(0.0, 0.06, t);
+        v = 0.09 + 0.06 * sm(0.0, 0.06, t);
       }
       v = Math.min(1, v);
       d[p] = v * 0.9 * 255; d[p + 1] = v * 0.94 * 255; d[p + 2] = Math.min(255, v * 1.08 * 255 + 3);

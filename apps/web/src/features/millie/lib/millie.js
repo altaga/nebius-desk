@@ -383,7 +383,7 @@ export class MillieController {
     if (!A?.label || !ids) return [];
     this._leatherShell = [];
     this._shoulderPuffs = [];
-    const keep = new Set([ids.jacket, ids.jacket_trim, ids.jacket_glow]);
+    const keep = new Set([ids.jacket, ids.jacket_trim, ids.jacket_glow, ids.innershirt]);
     const found = [];
     this.vrm.scene.traverse((o) => {
       if (!o.isSkinnedMesh || !o.geometry?.index || !o.geometry.attributes.uv) return;
@@ -419,10 +419,10 @@ export class MillieController {
       m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -1;
       m.matcapTexture = this._leatherMatcap ??= this._makeLeatherMatcap();
       m.matcapFactor?.setRGB(1, 1, 1);
-      m.parametricRimColorFactor?.setRGB(0.32, 0.38, 0.5);
-      m.parametricRimFresnelPowerFactor = 3.5;
+      m.parametricRimColorFactor?.setRGB(0.14, 0.16, 0.21);
+      m.parametricRimFresnelPowerFactor = 5;
       m.parametricRimLiftFactor = 0;
-      m.rimLightingMixFactor = 0.5;
+      m.rimLightingMixFactor = 0.8;
       m.rimMultiplyTexture = null;
       m.needsUpdate = true;
       const s = new THREE.SkinnedMesh(g2, m);
@@ -476,25 +476,11 @@ export class MillieController {
       segs.forEach((s, si) => { s.closestPointToPoint(p, true, near); const d = near.distanceToSquared(p); if (d < bd) { bd = d; bi = si; best.copy(near); } });
       return { vi, p, best, bd, torso: bi >= 0 && bi < torsoSegs };
     });
-    // Longer hem (no crop-top): lower torso stretches down and flares over the belt.
-    let hemY = Infinity;
-    for (const q of verts) if (q.torso) hemY = Math.min(hemY, q.p.y);
-    const torsoH = Math.max(1e-4, L.y - hemY), drop = torsoH * 0.32;
     for (const { vi, p, best, bd, torso } of verts) {
       v.copy(p);
       if (bd < Infinity && bd > 1e-10) {
-        dir.subVectors(v, best).normalize().multiplyScalar(span * 0.045).applyMatrix3(toLocal);
+        dir.subVectors(v, best).normalize().multiplyScalar(span * (torso ? 0.045 : 0.025)).applyMatrix3(toLocal);
         off[vi * 3] += dir.x; off[vi * 3 + 1] += dir.y; off[vi * 3 + 2] += dir.z;
-      }
-      if (torso && hemY < Infinity) {
-        const w = sm(hemY + torsoH * 0.45, hemY, v.y);
-        if (w > 0) {
-          dir.set(v.x - best.x, 0, v.z - best.z);
-          if (dir.lengthSq() > 1e-10) dir.normalize().multiplyScalar(span * 0.06 * w);
-          dir.y = -drop * w;
-          dir.applyMatrix3(toLocal);
-          off[vi * 3] += dir.x; off[vi * 3 + 1] += dir.y; off[vi * 3 + 2] += dir.z;
-        }
       }
       for (const S of [L, R]) {
         const d = v.distanceTo(S); if (d >= rad) continue;
@@ -529,11 +515,10 @@ export class MillieController {
       g.fillStyle = gr; g.fillRect(0, 0, N, N);
     };
     g.globalCompositeOperation = 'lighter';
-    blob(0.4, 0.34, 0.42, 'rgba(46,54,72,1)');
-    blob(0.36, 0.3, 0.11, 'rgba(170,182,210,1)');
-    blob(0.66, 0.7, 0.18, 'rgba(30,36,50,1)');
-    const ring = g.createRadialGradient(N / 2, N / 2, N * 0.36, N / 2, N / 2, N * 0.5);
-    ring.addColorStop(0, 'rgba(0,0,0,0)'); ring.addColorStop(1, 'rgba(84,96,124,1)');
+    blob(0.4, 0.34, 0.42, 'rgba(26,30,40,1)');
+    blob(0.36, 0.3, 0.13, 'rgba(78,86,104,1)');
+    const ring = g.createRadialGradient(N / 2, N / 2, N * 0.4, N / 2, N / 2, N * 0.5);
+    ring.addColorStop(0, 'rgba(0,0,0,0)'); ring.addColorStop(1, 'rgba(44,50,64,1)');
     g.fillStyle = ring; g.fillRect(0, 0, N, N);
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
