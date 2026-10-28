@@ -255,16 +255,22 @@ export function MillieOverlay({ deviceId }: Props) {
       setTourIndex(0);
       setPos(tourCenterPos(W_TOUR, H_TOUR, EDGE));
 
-      // /autotour: jacket + step 0 immediately, then 5s cadence. Manual /tour keeps the intro beat.
+      // /autotour beat: 1s center → jacket anim → 1s grace → then 5s/step flow.
       if (isAuto) {
-        millieRef.current?.setTourLook(true);
-        millieRef.current?.react("excited", 2.2, 1);
-        // Next frame so center dock + tour chrome paint before highlight/point.
-        const kick = window.setTimeout(() => {
-          applyTourStep(0);
-          scheduleAutoAdvance(0);
-        }, 0);
-        tourTimers.current.push(kick);
+        const JACKET_MS = 800; // matches setTourLook on-duration (~0.75s)
+        const centerId = window.setTimeout(() => {
+          millieRef.current?.setTourLook(true);
+          millieRef.current?.react("excited", 2.2, 1);
+          const afterJacket = window.setTimeout(() => {
+            const graceId = window.setTimeout(() => {
+              applyTourStep(0);
+              scheduleAutoAdvance(0);
+            }, 1000);
+            tourTimers.current.push(graceId);
+          }, JACKET_MS);
+          tourTimers.current.push(afterJacket);
+        }, 1000);
+        tourTimers.current.push(centerId);
         return;
       }
 
