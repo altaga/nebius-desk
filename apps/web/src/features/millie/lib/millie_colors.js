@@ -86,7 +86,7 @@ export class MillieColors {
       let v;
       if (id === idJ) {
         const crease = t < 0 ? Math.max(0.2, 1 + t * 6) : 1;
-        v = 0.075 * crease + 0.3 * sm(0.004, 0.06, t) + 0.05 * edge;
+        v = 0.075 * crease + 0.42 * sm(0.004, 0.06, t) + 0.1 * edge;
       } else if (id === idS) {
         // Waist band under the cropped hem reads as the jacket continuing to the belt.
         v = 0.07 * Math.max(0.45, 1 + t * 1.5);

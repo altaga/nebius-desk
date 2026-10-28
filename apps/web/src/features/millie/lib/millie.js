@@ -419,10 +419,10 @@ export class MillieController {
       m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -1;
       m.matcapTexture = this._leatherMatcap ??= this._makeLeatherMatcap();
       m.matcapFactor?.setRGB(1, 1, 1);
-      m.parametricRimColorFactor?.setRGB(0.14, 0.16, 0.21);
-      m.parametricRimFresnelPowerFactor = 5;
+      m.parametricRimColorFactor?.setRGB(0.26, 0.3, 0.4);
+      m.parametricRimFresnelPowerFactor = 4;
       m.parametricRimLiftFactor = 0;
-      m.rimLightingMixFactor = 0.8;
+      m.rimLightingMixFactor = 0.6;
       m.rimMultiplyTexture = null;
       m.needsUpdate = true;
       const s = new THREE.SkinnedMesh(g2, m);
@@ -476,10 +476,13 @@ export class MillieController {
       segs.forEach((s, si) => { s.closestPointToPoint(p, true, near); const d = near.distanceToSquared(p); if (d < bd) { bd = d; bi = si; best.copy(near); } });
       return { vi, p, best, bd, torso: bi >= 0 && bi < torsoSegs };
     });
+    // Rapper-hoodie fit: boxy torso that widens toward the hem, baggy sleeves.
+    const hipsY = pt('hips')?.y ?? L.y - span;
     for (const { vi, p, best, bd, torso } of verts) {
       v.copy(p);
       if (bd < Infinity && bd > 1e-10) {
-        dir.subVectors(v, best).normalize().multiplyScalar(span * (torso ? 0.045 : 0.025)).applyMatrix3(toLocal);
+        const k = torso ? 0.08 + 0.06 * sm(L.y, hipsY, v.y) : 0.07;
+        dir.subVectors(v, best).normalize().multiplyScalar(span * k).applyMatrix3(toLocal);
         off[vi * 3] += dir.x; off[vi * 3 + 1] += dir.y; off[vi * 3 + 2] += dir.z;
       }
       for (const S of [L, R]) {
@@ -488,7 +491,7 @@ export class MillieController {
         if (w <= 0) continue;
         dir.subVectors(v, S).normalize();
         lat.set(S.x - mid.x, 0, 0).normalize();
-        dir.multiplyScalar(0.12).add(lat.multiplyScalar(0.08)).addScaledVector(new THREE.Vector3(0, 1, 0), 0.08)
+        dir.multiplyScalar(0.14).add(lat.multiplyScalar(0.1)).addScaledVector(new THREE.Vector3(0, 1, 0), 0.09)
           .multiplyScalar(span * w).applyMatrix3(toLocal);
         off[vi * 3] += dir.x; off[vi * 3 + 1] += dir.y; off[vi * 3 + 2] += dir.z;
       }
@@ -515,10 +518,11 @@ export class MillieController {
       g.fillStyle = gr; g.fillRect(0, 0, N, N);
     };
     g.globalCompositeOperation = 'lighter';
-    blob(0.4, 0.34, 0.42, 'rgba(26,30,40,1)');
-    blob(0.36, 0.3, 0.13, 'rgba(78,86,104,1)');
-    const ring = g.createRadialGradient(N / 2, N / 2, N * 0.4, N / 2, N / 2, N * 0.5);
-    ring.addColorStop(0, 'rgba(0,0,0,0)'); ring.addColorStop(1, 'rgba(44,50,64,1)');
+    blob(0.4, 0.34, 0.42, 'rgba(38,44,58,1)');
+    blob(0.36, 0.3, 0.11, 'rgba(150,162,190,1)');
+    blob(0.66, 0.7, 0.16, 'rgba(24,28,40,1)');
+    const ring = g.createRadialGradient(N / 2, N / 2, N * 0.37, N / 2, N / 2, N * 0.5);
+    ring.addColorStop(0, 'rgba(0,0,0,0)'); ring.addColorStop(1, 'rgba(70,80,104,1)');
     g.fillStyle = ring; g.fillRect(0, 0, N, N);
     const tex = new THREE.CanvasTexture(cv);
     tex.colorSpace = THREE.SRGBColorSpace;
