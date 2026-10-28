@@ -2,9 +2,9 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  /* Keep guide + tour stages near the same height so Millie doesn't "shrink/grow". */
-  height: min(286px, 42dvh);
-  min-height: 250px;
+  /* Guide dock: compact. Tour uses the taller rule below. */
+  height: min(232px, 34dvh);
+  min-height: 200px;
   overflow: hidden;
   background: transparent;
   /* Let the overlay drag hit-layer receive pointers. */
@@ -12,8 +12,8 @@
 }
 
 :global([data-tour]) .canvas {
-  height: min(300px, 44dvh);
-  min-height: 268px;
+  height: min(320px, 48dvh);
+  min-height: 280px;
 }
 
 .canvas canvas {
