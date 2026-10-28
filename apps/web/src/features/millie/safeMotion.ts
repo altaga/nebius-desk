@@ -35,8 +35,15 @@ const CLIP_SET = new Set<string>(SAFE_CLIPS);
 const REACT_SET = new Set<string>(SAFE_REACTIONS);
 
 /** Opening line — local UI chrome, not a Nano reply. */
-export const MILLIE_INTRO =
-  "Hi — I'm Millie, your desk guide. Ask me where something is and I'll open it and point. I never run commands for you.";
+export const MILLIE_INTRO: Record<"es" | "en", string> = {
+  es: "¡Hola, soy Millie! Me sé este desk de memoria. Pídeme que te encuentre o abra lo que sea.",
+  en: "Hey, I'm Millie! I know this desk inside out. Ask me to find or open anything.",
+};
+
+export const MILLIE_PLACEHOLDER: Record<"es" | "en", { ready: string; noBoard: string }> = {
+  es: { ready: "Pregúntame algo… o escribe /tour", noBoard: "Elige un board primero… o escribe /tour" },
+  en: { ready: "Ask me anything… or type /tour", noBoard: "Pick a board first… or type /tour" },
+};
 
 export function pickSafeClip(name: string, fallback: SafeClip = "idle"): SafeClip {
   return CLIP_SET.has(name) ? (name as SafeClip) : fallback;

@@ -10,8 +10,12 @@ export type MillieHandle = {
   say: (text: string) => void;
   react: (name: string, hold?: number, intensity?: number) => void;
   play: (name: string) => void;
+  playing: () => string;
+  isBusy: () => boolean;
   pointAt: (el: Element | null) => void;
   stopPointing: () => void;
+  /** Tour-only black jacket + glasses; off restores default look. */
+  setTourLook: (on: boolean) => void;
 };
 
 type Props = { active: boolean; onLoadError?: (message: string) => void };
@@ -33,12 +37,21 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
     play(name) {
       ctrlRef.current?.play(name, { fade: 0.25 });
     },
+    playing() {
+      return ctrlRef.current?.playing ?? "idle";
+    },
+    isBusy() {
+      return ctrlRef.current?.busy ?? true;
+    },
     pointAt(el) {
       if (!el || !ctrlRef.current || !canvasRef.current) return;
       ctrlRef.current.pointAtElement(el, canvasRef.current);
     },
     stopPointing() {
       ctrlRef.current?.stopPointing();
+    },
+    setTourLook(on) {
+      ctrlRef.current?.setTourLook?.(on);
     },
   }));
 
@@ -91,9 +104,9 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         const box = new THREE.Box3().setFromObject(vrm.scene);
         if (box.isEmpty()) return;
         const size = box.getSize(new THREE.Vector3());
-        // Aim a bit above mid-body and pad tall so sneakers sit clearly above the ask bar.
-        const targetY = box.min.y + size.y * 0.58;
-        const halfH = (size.y * 1.18) / 2;
+        // Aim mid-chest; pad tall so sneakers clear the ask/tour bar (tight 1.18 clipped ankles).
+        const targetY = box.min.y + size.y * 0.55;
+        const halfH = (size.y * 1.34) / 2;
         const dist = halfH / Math.tan((camera.fov * Math.PI) / 360) / Math.max(camera.aspect, 0.5);
         camera.position.set(0, targetY, dist);
         camera.lookAt(0, targetY, 0);
@@ -130,6 +143,12 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         fitCamera();
         const millie = new MillieController(vrm, { camera, scene });
         ctrlRef.current = millie;
+        try {
+          await millie.initColors?.("/millie/millie_regions.json");
+          await millie.colors?.applyBrandedBody?.("/millie/atlas_body_branded.webp");
+        } catch {
+          /* badge brand is best-effort */
+        }
         millie.play("idle");
         millie.react("excited", { hold: 2.8, intensity: 1, fade: 0.28 });
         millie.play("wave");

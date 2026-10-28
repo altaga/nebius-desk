@@ -1,12 +1,33 @@
+.spotLabel {
+  position: fixed;
+  z-index: 96;
+  max-width: min(220px, 70vw);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--signal) 55%, var(--line-strong));
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px color-mix(in srgb, #000 40%, transparent);
+}
+
 .spot {
   position: fixed;
-  z-index: 40;
+  /* Above tour scrim (90), below Millie dock (100). */
+  z-index: 95;
   margin: 0;
   padding: 0;
-  border: 1.5px solid var(--signal);
+  border: 2px solid var(--signal);
   border-radius: var(--r-md);
-  background: var(--signal-soft);
-  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.35);
+  background: color-mix(in srgb, var(--signal) 12%, transparent);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.42);
   pointer-events: auto;
   animation: pulse 1.4s var(--ease) infinite;
 }

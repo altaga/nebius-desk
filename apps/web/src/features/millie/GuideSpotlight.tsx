@@ -7,7 +7,7 @@ import styles from "./GuideSpotlight.module.css";
 type Box = { top: number; left: number; width: number; height: number };
 
 export function GuideSpotlight() {
-  const { highlightTarget, clearHighlight } = useDeskGuide();
+  const { highlightTarget, highlightLabel, clearHighlight, tourActive } = useDeskGuide();
   const [box, setBox] = useState<Box | null>(null);
 
   useEffect(() => {
@@ -22,10 +22,10 @@ export function GuideSpotlight() {
         return;
       }
       const r = el.getBoundingClientRect();
-      setBox({ top: r.top - 4, left: r.left - 4, width: r.width + 8, height: r.height + 8 });
+      setBox({ top: r.top - 6, left: r.left - 6, width: r.width + 12, height: r.height + 12 });
     };
     measure();
-    const id = window.setInterval(measure, 200);
+    const id = window.setInterval(measure, 160);
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
     return () => {
@@ -37,13 +37,24 @@ export function GuideSpotlight() {
 
   if (!box || !highlightTarget) return null;
 
+  const labelTop = Math.max(8, box.top - 28);
+
   return (
-    <button
-      type="button"
-      className={styles.spot}
-      style={{ top: box.top, left: box.left, width: box.width, height: box.height }}
-      aria-label="Dismiss highlight"
-      onClick={clearHighlight}
-    />
+    <>
+      {highlightLabel ? (
+        <div className={styles.spotLabel} style={{ top: labelTop, left: box.left }} aria-hidden>
+          {highlightLabel}
+        </div>
+      ) : null}
+      <button
+        type="button"
+        className={styles.spot}
+        style={{ top: box.top, left: box.left, width: box.width, height: box.height }}
+        aria-label={tourActive ? `Tour: ${highlightLabel || highlightTarget}` : "Dismiss highlight"}
+        onClick={() => {
+          if (!tourActive) clearHighlight();
+        }}
+      />
+    </>
   );
 }

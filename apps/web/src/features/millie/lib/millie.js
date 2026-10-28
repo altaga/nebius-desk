@@ -210,7 +210,7 @@ export class MillieController {
     this.vis = { aa: 0, ih: 0, ou: 0, ee: 0, oh: 0 }; this.visDyn = new SOD(9, 0.75, 0, [0, 0, 0, 0, 0]);
     this.lookObj = new THREE.Object3D(); this.scene.add(this.lookObj); this.eyeDyn = new SOD(7, 0.95, 0, [0, 0, 0]); this.headLook = new SOD(1.5, 0.8, 0, [0, 0]);
     this.sacc = { next: 0.5, off: [0, 0] }; this.wander = { next: 2, tgt: [0, 0] }; this.talkEnergy = 0; this.beat = { next: 1.2, t: -1, side: 'left' };
-    this.armLen = this._armLength(); this.pointDyn = new SOD(2.4, 0.55, -0.15, [0, 0, 0]);   // r<0: tiny anticipation on target jumps
+    this.armLen = this._armLength(); this.pointDyn = new SOD(3.4, 0.92, 0, [0, 0, 0]);   // critically damped — no buzz on target updates
     if (vrm.lookAt) { vrm.lookAt.target = this.lookObj; vrm.lookAt.autoUpdate = true; }
     // Blended + z-writing face cards: fully transparent texels still write depth and punch square holes in the eye layers behind them.
     vrm.scene.traverse(o => { for (const m of [].concat(o.material || [])) if (m.transparent && m.depthWrite && !m.alphaTest) { m.alphaTest = 0.02; m.needsUpdate = true; } });
@@ -234,6 +234,13 @@ export class MillieController {
     this.clip = name;
   }
   get playing() { return this.gest.filter(g => g.fadeOut == null).map(g => g.name)[0] || 'idle'; }
+  /** True while a non-idle clip, reaction, point, or talk is active — presence beats must wait. */
+  get busy() {
+    return this.gest.some(g => g.fadeOut == null)
+      || !!this.point
+      || this.reacts.some(r => r.fadeOut == null)
+      || !!(this.talk || this.audio);
+  }
   setExpression(name, w = 1) { this.exprT[name] = w; }
   // v2.2 kawaii reactions: millie.react('shy'), react('excited', {hold: 2.5}) (auto-returns to neutral), react('neutral'); intensity 0..1
   react(name = 'neutral', { intensity = 1, hold = null, fade = 0.35 } = {}) {
@@ -247,8 +254,18 @@ export class MillieController {
   say(text, cps) { this.talk = { ...textToVisemes(text, cps), t: 0 }; return this.talk.dur; }
   sayAudio(analyser) { this.audio = { an: analyser, buf: new Uint8Array(analyser.frequencyBinCount) }; }
   stopTalking() { this.talk = null; this.audio = null; }
-  pointAtWorld(v3, side) { const fresh = !this.point; this.point = { pos: v3.clone(), side: side || null }; if (fresh) this.pointT = 0; }
-  stopPointing() { this.point = null; }
+  pointAtWorld(v3, side) {
+    // Ignore micro target jitter (re-measure / breath) — keeps IK from buzzing.
+    if (this.point && this.point.pos.distanceToSquared(v3) < 0.0004) {
+      if (side) this.point.side = side;
+      return;
+    }
+    const fresh = !this.point;
+    this.point = { pos: v3.clone(), side: side || this.point?.side || null };
+    this._pointHold = null; // re-freeze after settle
+    if (fresh) this.pointT = 0;
+  }
+  stopPointing() { this.point = null; this._pointHold = null; this._lastPoint = null; }
   lookAtWorld(v3) { this.lookTarget = v3 ? v3.clone() : null; }
   screenToWorld(x, y, rect, depthOffset = 0.25) {
     const ndc = new THREE.Vector2(((x - rect.left) / rect.width) * 2 - 1, -((y - rect.top) / rect.height) * 2 + 1);
@@ -258,13 +275,229 @@ export class MillieController {
     const ray = new THREE.Raycaster(); ray.setFromCamera(ndc, this.camera); const hit = new THREE.Vector3();
     return ray.ray.intersectPlane(plane, hit) ? hit : c;
   }
-  pointAtElement(el, canvas = document.querySelector('canvas'), side) { const r = el.getBoundingClientRect(); const p = this.screenToWorld(r.left + r.width / 2, r.top + r.height / 2, canvas.getBoundingClientRect()); this.pointAtWorld(p, side); return p; }
+  pointAtElement(el, canvas = document.querySelector('canvas'), side) {
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const cr = (canvas || document.querySelector('canvas'))?.getBoundingClientRect?.();
+    if (!cr || cr.width < 2 || cr.height < 2) return null;
+    // Nearest edge of the UI target to Millie's chest (screen space).
+    const mx = cr.left + cr.width * 0.5;
+    const my = cr.top + cr.height * 0.42;
+    const ax = clamp(mx, r.left + 4, r.right - 4);
+    const ay = clamp(my, r.top + 4, r.bottom - 4);
+    // Facing-camera: target on viewer's left → her RIGHT arm (and vice versa).
+    const prefer = side || (ax < mx - 10 ? 'right' : ax > mx + 10 ? 'left' : null);
+    // Desk targets live outside the tiny overlay canvas — raw NDC misses the chest plane
+    // and IK + head collision fight every frame (hand "vibrates"). Map screen direction
+    // into a reachable body-local point instead.
+    const body = this._body();
+    const L = Math.max(this.armLen || 0.35, 0.2);
+    const dx = (ax - mx) / Math.max(cr.width, 1);
+    const dy = (my - ay) / Math.max(cr.height, 1);
+    let lx = clamp(dx * 1.55, -1.05, 1.05) * L;
+    let ly = clamp(dy * 1.25, -0.55, 0.85) * L;
+    let lz = Math.max(0.42 * L, 0.62 * L - Math.abs(lx) * 0.18);
+    // Soft face clearance (same bias as the pointing layer).
+    const sx = prefer === 'left' ? 1 : prefer === 'right' ? -1 : Math.sign(lx || 1);
+    if (Math.abs(lx) < 0.3 * L && ly > 0.1 * L) {
+      lx = sx * Math.max(Math.abs(lx), 0.4 * L);
+      ly = Math.min(ly, 0.06 * L);
+      lz = Math.max(lz, 0.45 * L);
+    }
+    const p = new THREE.Vector3(lx * this.s0, ly, lz * this.s0).applyQuaternion(body.q).add(body.o);
+    this.pointAtWorld(p, prefer);
+    return p;
+  }
   // colours (see millie_colors.js); await millie.initColors() once after loading
   async initColors(url) { const { MillieColors } = await import('./millie_colors.js'); this.colors = await MillieColors.load(this.vrm, url); return this.colors; }
   setColor(region, hex) { this.colors.setColor(region, hex); }
   setPalette(p, opt) { this.colors.setPalette(p, opt); }
   getRegions() { return this.colors.getRegions(); }
   getPresets() { return this.colors.presets(); }
+  /**
+   * Tour-only look: animated black leather jacket + Jensen glasses.
+   * On = tumble-on glasses + staged darken; off = fly-away + restore Nebius.
+   */
+  setTourLook(on) {
+    const g = this._ensureTourGlasses();
+    const was = this._tourLook?.on;
+    // Reverse mid-flight if the user toggles again.
+    let t0 = 0;
+    if (this._tourLook && was === !on) t0 = Math.max(0, 1 - this._tourLook.t / this._tourLook.dur) * (on ? 0.85 : 0.7);
+    this._tourLook = {
+      on: !!on,
+      t: t0,
+      dur: on ? 0.9 : 0.75,
+      jacketStep: 0,
+      spin: on ? 1 : -1,
+    };
+    if (g && this._glassesHome) {
+      g.visible = true;
+      if (on && t0 === 0) {
+        g.scale.setScalar(0.05);
+        g.position.copy(this._glassesHome.pos);
+        g.position.y += 0.09;
+      }
+    }
+    return this;
+  }
+  _ensureTourGlasses() {
+    if (this._tourGlasses) return this._tourGlasses;
+    const head = this.bone('head');
+    if (!head || !this.camera) return null;
+    head.updateWorldMatrix(true, false);
+
+    const frameMat = new THREE.MeshStandardMaterial({
+      color: 0x0a0a0a, roughness: 0.25, metalness: 0.2, roughness: 0.45,
+    });
+    const lensMat = new THREE.MeshStandardMaterial({
+      color: 0x121218, transparent: true, opacity: 0.42, roughness: 0.55,
+      metalness: 0.05, roughness: 0.15, side: THREE.DoubleSide, depthWrite: false,
+    });
+
+    const le = this.bone('leftEye'), re = this.bone('rightEye');
+    let mid = new THREE.Vector3(0, 0.055, 0);
+    let half = 0.03;
+    if (le && re) {
+      const lp = head.worldToLocal(le.getWorldPosition(new THREE.Vector3()));
+      const rp = head.worldToLocal(re.getWorldPosition(new THREE.Vector3()));
+      mid = lp.clone().add(rp).multiplyScalar(0.5);
+      half = Math.max(Math.abs(lp.x - rp.x) * 0.5, 0.018);
+    }
+    // Sit slightly toward the camera so lenses clear lashes regardless of VRM0/1 face axis.
+    const toCam = this.camera.position.clone().sub(head.getWorldPosition(new THREE.Vector3())).normalize();
+    const fwd = toCam.applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()).invert());
+    mid.addScaledVector(fwd, 0.016);
+
+    const lensW = half * 1.05, lensH = lensW * 0.7, thick = Math.max(lensW * 0.14, 0.0035), depth = thick * 1.1;
+    const rim = (ox) => {
+      const g = new THREE.Group();
+      const top = new THREE.Mesh(new THREE.BoxGeometry(lensW + thick, thick, depth), frameMat);
+      top.position.y = lensH * 0.5;
+      const bot = new THREE.Mesh(new THREE.BoxGeometry(lensW + thick, thick * 0.85, depth), frameMat);
+      bot.position.y = -lensH * 0.5;
+      const L = new THREE.Mesh(new THREE.BoxGeometry(thick, lensH, depth), frameMat);
+      L.position.x = -lensW * 0.5;
+      const R = new THREE.Mesh(new THREE.BoxGeometry(thick, lensH, depth), frameMat);
+      R.position.x = lensW * 0.5;
+      const lens = new THREE.Mesh(new THREE.PlaneGeometry(lensW * 0.92, lensH * 0.88), lensMat);
+      lens.position.z = depth * 0.15;
+      g.add(top, bot, L, R, lens);
+      g.position.set(ox, 0, 0);
+      return g;
+    };
+
+    const group = new THREE.Group();
+    group.name = 'MillieTourGlasses';
+    group.add(rim(-half * 1.05), rim(half * 1.05));
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(half * 0.35, thick * 0.7, depth * 0.8), frameMat);
+    group.add(bridge);
+    const armLen = half * 1.6, armY = lensH * 0.15;
+    for (const sx of [-1, 1]) {
+      const arm = new THREE.Mesh(new THREE.BoxGeometry(thick * 0.7, thick * 0.7, armLen), frameMat);
+      arm.position.set(sx * (half * 1.05 + lensW * 0.5), armY, -armLen * 0.45);
+      group.add(arm);
+    }
+    group.position.copy(mid);
+    // Face the camera in head space so rectangular frames read front-on.
+    const zAxis = new THREE.Vector3(0, 0, 1);
+    const q = new THREE.Quaternion().setFromUnitVectors(zAxis, fwd.clone().normalize());
+    group.quaternion.copy(q);
+    group.visible = false;
+    group.scale.setScalar(1);
+    head.add(group);
+    this._glassesHome = { pos: mid.clone(), quat: q.clone() };
+    this._tourGlasses = group;
+    this._glassesLensMat = lensMat;
+    return group;
+  }
+  /** Drive glasses tumble + staged jacket palette (not every-frame recolor). */
+  _updateTourLook(dt) {
+    const a = this._tourLook;
+    if (!a) return;
+    a.t += dt;
+    const u = clamp(a.t / a.dur, 0, 1);
+    const g = this._tourGlasses;
+    const home = this._glassesHome;
+    if (g && home) {
+      if (a.on) {
+        // Drop from above, double spin, squash-bounce land.
+        const land = smoother(clamp(u / 0.72, 0, 1));
+        const bounce = u < 0.72 ? 0 : Math.sin(((u - 0.72) / 0.28) * Math.PI) * 0.12 * (1 - (u - 0.72) / 0.28);
+        const sc = land < 1
+          ? 0.05 + land * 1.2
+          : 1.25 - bounce * 0.8;
+        const settled = u >= 1 ? 1 : (land >= 1 ? 1.08 - bounce * 0.5 : sc);
+        g.scale.set(settled * (1 + bounce * 0.35), settled * (1 - bounce * 0.45), settled);
+        g.position.copy(home.pos);
+        g.position.y += (1 - land) * 0.1 + bounce * 0.012;
+        g.position.x += Math.sin(land * Math.PI * 2) * 0.012 * (1 - land);
+        const spin = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+          land * Math.PI * 2 * a.spin,
+          land * Math.PI * 2.4 * a.spin,
+          (1 - land) * 0.4 * a.spin,
+        ));
+        g.quaternion.copy(home.quat).multiply(spin);
+        if (this._glassesLensMat) this._glassesLensMat.opacity = 0.08 + land * 0.34;
+      } else {
+        // Flip up, shrink, spin away.
+        const lift = smoother(u);
+        const sc = 1 - lift * 0.95;
+        g.scale.set(sc * (1 + lift * 0.4), sc * (1 - lift * 0.2), sc);
+        g.position.copy(home.pos);
+        g.position.y += lift * 0.12;
+        g.position.x += Math.sin(lift * Math.PI * 3) * 0.04 * lift;
+        const spin = new THREE.Quaternion().setFromEuler(new THREE.Euler(
+          -lift * Math.PI * 1.6,
+          lift * Math.PI * 3.2 * a.spin,
+          lift * Math.PI * 0.5,
+        ));
+        g.quaternion.copy(home.quat).multiply(spin);
+        if (this._glassesLensMat) this._glassesLensMat.opacity = 0.42 * (1 - lift);
+      }
+    }
+    // Jacket: 2 discrete snaps only (atlas rebuild is expensive).
+    if (this.colors) {
+      if (a.on) {
+        if (a.jacketStep < 1 && u >= 0.22) {
+          this.colors.setPalette({
+            jacket: '#4a4a52', jacket_trim: '#3a3a42', jacket_glow: '#2a2a30',
+            turtleneck: '#1a1a20', innershirt: '#141418', shorts: '#3a3a42',
+            shorts_trim: '#2a2a30', shorts_cuff: '#2a2a30', shorts_tab: '#2a2a30',
+            shoes: '#2a2a30', shoes_accent: '#1a1a20', badge: '#3a3a42', badge_trim: '#2a2a30',
+            visor: '#2a2a30', outline: '#101014',
+          });
+          a.jacketStep = 1;
+        }
+        if (a.jacketStep < 2 && u >= 0.48) {
+          this.colors.setPalette('huang');
+          a.jacketStep = 2;
+        }
+      } else if (a.jacketStep < 1 && u >= 0.28) {
+        this.colors.reset();
+        a.jacketStep = 1;
+      }
+    }
+    if (u >= 1) {
+      if (g && home) {
+        if (a.on) {
+          g.position.copy(home.pos);
+          g.quaternion.copy(home.quat);
+          g.scale.setScalar(1);
+          if (this._glassesLensMat) this._glassesLensMat.opacity = 0.42;
+        } else {
+          g.visible = false;
+          g.scale.setScalar(1);
+          g.position.copy(home.pos);
+          g.quaternion.copy(home.quat);
+          if (this._glassesLensMat) this._glassesLensMat.opacity = 0.42;
+        }
+      }
+      if (a.on && this.colors && a.jacketStep < 2) this.colors.setPalette('huang');
+      if (!a.on && this.colors) this.colors.reset();
+      this._tourLook = null;
+    }
+  }
   // ---- internals
   _body() { const root = this.bone('hips').parent; return { o: (this.bone('upperChest') || this.bone('chest')).getWorldPosition(new THREE.Vector3()), q: root.getWorldQuaternion(new THREE.Quaternion()), root }; }
   _ikArm(side, targetWorld) {   // analytic 2-bone IK on the CURRENT (target) pose -> local quats for upper/lower arm
@@ -282,15 +515,18 @@ export class MillieController {
   }
   update(dt) {
     dt = Math.min(dt, 1 / 20); this.time += dt; const T = this.time, s0 = this.s0;
+    this._updateTourLook(dt);
     // ----- 1) gather additive layer offsets (degrees, authored facing +Z)
     const R = {}, arms = { left: null, right: null }, fing = {}, ex = {}; let hips = [0, 0, 0], look = null, lookW = 0;
     const P = { rot: (b, v, w = 1) => add(R, b, v, w), hips: (v, w = 1) => { hips = hips.map((x, i) => x + v[i] * w); }, expr: (n, w) => { ex[n] = Math.max(ex[n] || 0, w); },
       arm: (side, v, w = 1) => { const a = arms[side]; if (!a) arms[side] = { v: v.slice(), w }; else { const k = w / (a.w + w + 1e-6); a.v = a.v.map((x, i) => x + (v[i] - x) * k); a.w = Math.min(1, a.w + w); } },
       fingers: (side, c, ic, sp, w = 1) => { (fing[side] ??= []).push([c, ic, sp, w]); }, look: (v, w) => { look = v; lookW = w; } };
-    // idle: breathing, weight shift, sway (always on)
+    // idle: breathing, weight shift, sway (always on) — quiet torso while aiming so shoulder IK doesn't buzz
+    const aiming = !!this.point;
     const br = Math.sin(T * TAU * 0.24), ws = noise(T * 0.35, 1.3), sw = [noise(T * 0.6, 4.1), noise(T * 0.5, 7.7), noise(T * 0.45, 2.2)];
-    add(R, 'chest', [1.8 * br, 0, 0]); add(R, 'spine', [0.8 * br + 1.2 * sw[0], 1.5 * sw[1], -2.2 * ws]); add(R, 'upperChest', [0.6 * br, 0, 0]);
-    add(R, 'hips', [0, 1.2 * sw[2], 2.6 * ws]); hips = [0.010 * ws, -0.006 + 0.0016 * br, 0];   // base knee micro-bend; exhale = knees flex
+    const tb = aiming ? 0.15 : 1;
+    add(R, 'chest', [1.8 * br * tb, 0, 0]); add(R, 'spine', [(0.8 * br + 1.2 * sw[0]) * tb, 1.5 * sw[1] * tb, -2.2 * ws * tb]); add(R, 'upperChest', [0.6 * br * tb, 0, 0]);
+    add(R, 'hips', [0, 1.2 * sw[2] * tb, 2.6 * ws * tb]); hips = [0.010 * ws * tb, -0.006 + 0.0016 * br * tb, 0];
     const FT = { left: [0, 0, 0, 0, 0], right: [0, 0, 0, 0, 0] };
     P.foot = (sd, v, w = 1) => { const o = FT[sd]; for (let i = 0; i < 5; i++) o[i] += v[i] * w; };
     { const relax = ws > 0 ? 'right' : 'left', a = Math.abs(ws);   // softer weight shift — big heel lifts flash the green soles in the desk crop
@@ -303,8 +539,11 @@ export class MillieController {
       if (pv.t >= 0) { pv.t += dt; const e = smooth(pv.t / 0.4) * smooth((3.2 - pv.t) / 0.5); P.foot(pv.side, [0, 0, 0, 4 * e, (pv.side === 'left' ? 1 : -1) * pv.dir * 7 * e]); if (pv.t > 3.2) pv.t = -1; } }
     add(R, 'neck', [1.5 * sw[1], 2 * sw[0], 0]); add(R, 'head', [2.2 * sw[2] - 1.2 * br, 3.5 * sw[0], 2.5 * ws + 1.5 * sw[1]]);
     add(R, 'leftShoulder', [0, 0, 1.2 * br]); add(R, 'rightShoulder', [0, 0, -1.2 * br]);
-    add(R, 'leftUpperArm', [0, 3 * sw[1], 2.5 * br + 2 * ws]); add(R, 'rightUpperArm', [0, -3 * sw[2], -2.5 * br + 2 * ws]);
-    add(R, 'leftLowerArm', [0, -4 * sw[0], 0]); add(R, 'rightLowerArm', [0, 4 * sw[1], 0]);
+    // Idle arm sway fights pointing IK — mute while aiming.
+    if (!aiming) {
+      add(R, 'leftUpperArm', [0, 3 * sw[1], 2.5 * br + 2 * ws]); add(R, 'rightUpperArm', [0, -3 * sw[2], -2.5 * br + 2 * ws]);
+      add(R, 'leftLowerArm', [0, -4 * sw[0], 0]); add(R, 'rightLowerArm', [0, 4 * sw[1], 0]);
+    }
     // gestures (several can overlap during cross-fades)
     for (const g of this.gest) {
       g.t += dt; const C = CLIPS[g.name]; let w = smooth(g.t / Math.max(g.fadeIn, 1e-3));
@@ -323,22 +562,27 @@ export class MillieController {
       let tw = r.k * smooth(r.t / Math.max(r.fadeIn, 1e-3)); if (r.fadeOut != null) { r.fo = (r.fo || 0) + dt; tw *= 1 - smooth(r.fo / Math.max(r.fadeOut, 1e-3)); }
       r.w = clamp(r.dyn.step(dt, [tw])[0], 0, 1.15); const w = r.w, RX = REACTIONS[r.name];
       for (const [n, v] of Object.entries(RX.face)) { if (n.startsWith('m:')) rawT[n.slice(2)] = Math.max(rawT[n.slice(2)] || 0, v * Math.min(w, 1)); else P.expr(n, v * Math.min(w, 1)); }
-      const PW = { rot: (b, v, ww = 1) => P.rot(b, v, ww * w), hips: (v, ww = 1) => P.hips(v, ww * w), expr: (n, ww) => P.expr(n, ww * w), arm: (sd, v, ww = 1) => P.arm(sd, v, ww * Math.min(w, 1)),
-        fingers: (sd, c, ic, sp, ww = 1) => P.fingers(sd, c, ic, sp, ww * Math.min(w, 1)), look: (v, ww) => P.look(v, ww * Math.min(w, 1)), foot: (sd, v, ww = 1) => P.foot(sd, v, ww * w) };
+      // Face-only while pointing — reaction arms + point IK = hand buzz.
+      const PW = { rot: (b, v, ww = 1) => { if (aiming && /Arm|Hand|Shoulder/.test(b)) return; P.rot(b, v, ww * w); }, hips: (v, ww = 1) => P.hips(v, ww * w * (aiming ? 0.35 : 1)), expr: (n, ww) => P.expr(n, ww * w),
+        arm: (sd, v, ww = 1) => { if (aiming) return; P.arm(sd, v, ww * Math.min(w, 1)); },
+        fingers: (sd, c, ic, sp, ww = 1) => { if (aiming) return; P.fingers(sd, c, ic, sp, ww * Math.min(w, 1)); },
+        look: (v, ww) => P.look(v, ww * Math.min(w, 1)), foot: (sd, v, ww = 1) => P.foot(sd, v, ww * w * (aiming ? 0.25 : 1)) };
       RX.body(r.t, PW);
     }
     this.reacts = this.reacts.filter(r => !(r.fadeOut != null && (r.fo || 0) >= r.fadeOut && r.w < 0.01));
     // talking: head beats from speech energy + occasional open-hand beat gesture
     const talking = !!(this.talk || this.audio); this.talkEnergy += ((talking ? (this.vis.aa + this.vis.oh + this.vis.ee * 0.6) : 0) - this.talkEnergy) * (1 - Math.exp(-dt * 6));
     if (talking) {
-      add(R, 'head', [4 * this.talkEnergy + 2 * noise(T * 2.1, 9), 3 * noise(T * 1.3, 5), 2.5 * noise(T * 0.9, 3)]); add(R, 'neck', [2 * this.talkEnergy, 0, 0]);
+      const talkAmp = aiming ? 0.35 : 1;
+      add(R, 'head', [(4 * this.talkEnergy + 2 * noise(T * 2.1, 9)) * talkAmp, 3 * noise(T * 1.3, 5) * talkAmp, 2.5 * noise(T * 0.9, 3) * talkAmp]); add(R, 'neck', [2 * this.talkEnergy * talkAmp, 0, 0]);
       const busy = this.point || this.gest.some(g => g.fadeOut == null);
       if (!busy) { this.beat.next -= dt; if (this.beat.next <= 0 && this.beat.t < 0) { this.beat.t = 0; this.beat.side = Math.random() < 0.5 ? 'left' : 'right'; this.beat.next = 2 + Math.random() * 2.5; } }
     }
-    if (this.beat.t >= 0) { this.beat.t += dt; const b = this.beat.t, w = Math.sin(clamp(b / 1.3, 0, 1) * Math.PI); const sx = this.beat.side === 'left' ? 1 : -1;
+    if (this.beat.t >= 0 && !aiming) { this.beat.t += dt; const b = this.beat.t, w = Math.sin(clamp(b / 1.3, 0, 1) * Math.PI); const sx = this.beat.side === 'left' ? 1 : -1;
       P.arm(this.beat.side, [sx * 0.15, -0.2 + 0.12 * Math.sin(b * TAU * 1.4) * w, 0.55], w); P.fingers(this.beat.side, 8, 6, 8, w); add(R, this.beat.side + 'Hand', [0, 0, sx * -25 * w]);
       if (b > 1.3) this.beat.t = -1; }
-    // pointing: head/eyes lead, arm follows with anticipation + overshoot, body leans, periodic emphasis
+    else if (this.beat.t >= 0 && aiming) this.beat.t = -1;
+    // pointing: head/eyes lead, arm follows once — steady hold (no emph pulse / step-hop buzz)
     const pk = 1 - Math.exp(-dt * 5); this.pointW += ((this.point ? 1 : 0) - this.pointW) * pk; this.pointT += dt;
     const body = this._body();
     if (this.point) this._lastPoint = this.point;
@@ -346,18 +590,27 @@ export class MillieController {
       const Pp = this._lastPoint; const local = Pp.pos.clone().sub(body.o).applyQuaternion(body.q.clone().invert()); local.x *= s0; local.z *= s0;
       const side = Pp.side || (local.x >= 0 ? 'left' : 'right'); const sx = side === 'left' ? 1 : -1;
       const tgt = this.pointDyn.step(dt, [Pp.pos.x, Pp.pos.y, Pp.pos.z]);
-      const lead = smooth((this.pointT - 0.12) / 0.25), pull = Math.sin(clamp(this.pointT / 0.22, 0, 1) * Math.PI) * 0.25;   // eyes/head first, arm starts 0.12 s later after a small pull-back
-      const sh = this.bone(side + 'UpperArm').getWorldPosition(new THREE.Vector3()); const dir = new THREE.Vector3(...tgt).sub(sh).normalize();
-      const reachW = sh.clone().addScaledVector(dir, this.armLen * (0.93 - pull));
-      const bl = reachW.sub(body.o).applyQuaternion(body.q.clone().invert()); bl.x *= s0; bl.z *= s0; bl.divideScalar(this.armLen);
-      const emph = Math.max(0, Math.sin((this.pointT - 0.9) * TAU / 1.8)) ** 6 * smooth((this.pointT - 0.9) / 0.2);
+      const lead = smooth((this.pointT - 0.1) / 0.35);
+      // Freeze body-local aim after settle — recomputing from a breathing shoulder buzzes the hand.
+      let bl;
+      if (this._pointHold && this.pointT > 0.55) {
+        bl = this._pointHold.clone();
+      } else {
+        const sh = this.bone(side + 'UpperArm').getWorldPosition(new THREE.Vector3());
+        const dir = new THREE.Vector3(...tgt).sub(sh); const dLen = dir.length(); if (dLen > 1e-5) dir.multiplyScalar(1 / dLen); else dir.set(sx * 0.4, 0.1, 0.9);
+        const reachW = sh.clone().addScaledVector(dir, this.armLen * 0.9);
+        bl = reachW.sub(body.o).applyQuaternion(body.q.clone().invert()); bl.x *= s0; bl.z *= s0; bl.divideScalar(this.armLen);
+        const towardFace = Math.abs(bl.x) < 0.28 && bl.y > 0.12;
+        if (towardFace) { bl.x = sx * Math.max(Math.abs(bl.x), 0.38); bl.y = Math.min(bl.y, 0.05); bl.z = Math.max(bl.z, 0.35); }
+        if (this.pointT > 0.5) this._pointHold = bl.clone();
+      }
+      const headBusy = this.gest.some(g => g.fadeOut == null);
       const w = this.pointW;
-      P.arm(side, bl.toArray(), w * Math.max(lead, 0.02)); P.fingers(side, 75, 2, 0, w); add(R, side + 'Hand', [-8 * emph * w, 0, 0]);
+      if (!headBusy) {
+        P.arm(side, bl.toArray(), w * Math.max(lead, 0.02)); P.fingers(side, 75, 2, 0, w);
+      }
       const yaw = clamp(Math.atan2(local.x, local.z) / D, -40, 40), up = clamp(local.y * 40, -15, 15);
-      add(R, 'spine', [0, yaw * 0.12 * w, -sx * 3 * w]); add(R, 'chest', [-up * 0.15 * w, yaw * 0.1 * w, 0]); P.hips([sx * 0.006, 0.003 * emph, 0], w);
-      // step turn: the pointing-side foot steps out and turns toward the target (lifts while the weight is changing), hips follow
-      const turn = clamp(yaw / 40, -1, 1), lift = 0.024 * 4 * w * (1 - w) * Math.min(1, Math.abs(turn) * 2 + 0.3);
-      P.foot(side, [sx * 0.016 * w, lift, 0.012 * w, lift * 300, yaw * 0.35 * w]); P.foot(side === 'left' ? 'right' : 'left', [0, 0, 0, 5 * w, yaw * 0.12 * w]); add(R, 'hips', [0, yaw * 0.18 * w, 0]);
+      add(R, 'spine', [0, yaw * 0.08 * w, -sx * 1.5 * w]); add(R, 'chest', [-up * 0.08 * w, yaw * 0.06 * w, 0]);
       if (!this.lookTarget) { look = null; this._autoLook = new THREE.Vector3(...tgt); } else this._autoLook = null;
     } else this._autoLook = null;
     // ----- 2) compose target local rotations (rest * additive), solve IK on the composed pose
@@ -395,11 +648,19 @@ export class MillieController {
     const big = Math.abs(yaw - (this._lastYaw ?? yaw)) > 0.25; this._lastYaw = yaw; if (big && Math.random() < 0.5) this.blink.next = Math.min(this.blink.next, 0.02);
     _e.set(s0 * hl[1] * hw * 0.75, hl[0] * hw * 0.75, 0); tq.head.premultiply(_q.setFromEuler(_e)); _e.set(s0 * hl[1] * hw * 0.25, hl[0] * hw * 0.25, 0); tq.neck?.premultiply(_q.setFromEuler(_e));
     // ----- 4) second-order dynamics on every bone (rotation vectors) + hips translation
+    // Hard-set pointing arm — SOD lag on upper/lower arm is the remaining buzz.
     const v3 = [0, 0, 0];
-    for (const n of this.names) { const q = tq[n]; qlog(q, v3); const d = this.dyn[n]; if (this._first) d.reset(v3); const y = d.step(dt, v3); qexp(y, this.bone(n).quaternion); }
+    const armFrozen = (n) => aiming && /^(left|right)(UpperArm|LowerArm|Hand)$/.test(n);
+    for (const n of this.names) {
+      const q = tq[n]; qlog(q, v3); const d = this.dyn[n]; if (this._first) d.reset(v3);
+      if (armFrozen(n)) { this.bone(n).quaternion.copy(q); d.reset(v3); continue; }
+      const y = d.step(dt, v3); qexp(y, this.bone(n).quaternion);
+    }
     const hy = this.hipsDyn.step(dt, hips); if (this._first) this.hipsDyn.reset(hips);
     this.bone('hips').position.copy(this.hipsRest).add(_v.set(hy[0] * s0, hy[1], hy[2] * s0));
     if (this.legsEnabled) this._legIK(dt, FT);
+    // Soft limb↔head collisions (clip gestures / pointing through the chibi face).
+    this._resolveArmHeadCollisions();
     // ----- 5) expressions: clip + user, eased with critically damped dynamics; blink; visemes; conflict rules
     const E = {}; for (const n in this.exprT) E[n] = this.exprT[n]; for (const n in ex) E[n] = Math.max(E[n] || 0, ex[n]);
     if (talking && !E.Smug) E.Explaining = Math.max(E.Explaining || 0, 0.25 * this.talkEnergy);
@@ -441,6 +702,78 @@ export class MillieController {
   _applyRaw() {   // raw VRoid face morphs used by reactions (after vrm.update so the expression manager does not overwrite them)
     if (!this._rawIdx) { this._rawIdx = []; this.vrm.scene.traverse(o => { if (o.morphTargetDictionary) for (const k in o.morphTargetDictionary) { const m = k.match(/(Fcl_EYE_Joy|Fcl_EYE_Close)$/); if (m) this._rawIdx.push([o, o.morphTargetDictionary[k], m[1]]); } }); }
     for (const [o, i, n] of this._rawIdx) { const v = this.raw[n] || 0; if (v > 0) o.morphTargetInfluences[i] = Math.max(o.morphTargetInfluences[i], v); }
+  }
+  /**
+   * Soft collision: keep lower-arm / hand outside a head sphere.
+   * Re-IKs the arm to a pushed wrist and syncs bone dynamics so the next frame doesn't snap back.
+   */
+  _resolveArmHeadCollisions() {
+    const head = this.bone('head');
+    if (!head || !this.armLen) return;
+    this.vrm.scene.updateMatrixWorld(true);
+    const hp = head.getWorldPosition(new THREE.Vector3());
+    // Chibi head is large vs arm length — generous radius + padding.
+    const R = Math.max(0.1, this.armLen * 0.58);
+    const pad = 0.018;
+    const body = this._body();
+    const s0 = this.s0;
+    const tmp = new THREE.Vector3();
+    const v3 = [0, 0, 0];
+    // While pointing, that arm already clears the face — collision re-IK fights pointDyn → vibrate.
+    let pointSide = null;
+    if (this.point && this.pointW > 0.2) {
+      const local = this.point.pos.clone().sub(body.o).applyQuaternion(body.q.clone().invert());
+      local.x *= s0;
+      pointSide = this.point.side || (local.x >= 0 ? 'left' : 'right');
+    }
+    for (const side of ['left', 'right']) {
+      if (side === pointSide) continue;
+      const uaN = side + 'UpperArm', laN = side + 'LowerArm', hdN = side + 'Hand';
+      const ua = this.bone(uaN), la = this.bone(laN), hd = this.bone(hdN);
+      if (!ua || !la || !hd) continue;
+      const elbow = la.getWorldPosition(new THREE.Vector3());
+      const wrist = hd.getWorldPosition(new THREE.Vector3());
+      const mid = elbow.clone().lerp(wrist, 0.55);
+      const samples = [elbow, mid, wrist];
+      let pen = 0, pushDir = null, hit = null;
+      for (const p of samples) {
+        const d = p.clone().sub(hp);
+        const dist = d.length();
+        const depth = R - dist;
+        if (depth > pen) {
+          pen = depth;
+          hit = p;
+          pushDir = dist > 1e-5 ? d.normalize() : new THREE.Vector3(side === 'left' ? 1 : -1, 0, 0.2).normalize();
+        }
+      }
+      if (pen <= 0.004 || !pushDir || !hit) continue;
+
+      // Desired wrist = current wrist pushed out of the sphere along the hit normal.
+      const safeWrist = wrist.clone().addScaledVector(pushDir, pen + pad);
+      // Prefer clearing the face laterally (desk crop) — keep hand off the midline.
+      const local = safeWrist.clone().sub(body.o).applyQuaternion(body.q.clone().invert());
+      local.x *= s0;
+      const sx = side === 'left' ? 1 : -1;
+      const minLat = this.armLen * 0.3;
+      if (Math.abs(local.x) < minLat) local.x = sx * minLat;
+      if (local.y > this.armLen * 0.18) local.y = this.armLen * 0.1;
+      if (local.z < this.armLen * 0.12) local.z = this.armLen * 0.2;
+      const worldT = tmp.set(local.x * s0, local.y, local.z * s0).applyQuaternion(body.q).add(body.o);
+
+      let qu, ql;
+      try {
+        [qu, ql] = this._ikArm(side, worldT);
+      } catch {
+        continue;
+      }
+      const k = clamp(pen / (R * 0.45), 0.4, 1);
+      ua.quaternion.slerp(qu, k);
+      la.quaternion.slerp(ql, k);
+      // Keep SOD from fighting the correction next frame.
+      if (this.dyn[uaN]) { qlog(ua.quaternion, v3); this.dyn[uaN].reset(v3); }
+      if (this.dyn[laN]) { qlog(la.quaternion, v3); this.dyn[laN].reset(v3); }
+    }
+    this.vrm.scene.updateMatrixWorld(true);
   }
   _legIK(dt, FT) {   // planted feet: analytic 2-bone IK per leg on the smoothed pose; foot targets are second-order smoothed (ease + soft overshoot)
     const s0 = this.s0, root = this.bone('hips').parent, hipsB = this.bone('hips'); hipsB.updateMatrixWorld(true);

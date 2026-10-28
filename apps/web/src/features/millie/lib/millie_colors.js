@@ -13,6 +13,9 @@ export const EXTRA_PRESETS = {
     belt: '#5b3a4a', buckle: '#ffffff', shoes: '#ffffff', shoes_accent: '#ff8fb1', shoes_laces: '#e6b8c6', shoes_lining: '#5b3a4a', badge: '#ffffff', badge_trim: '#ff8fb1', badge_text: '#5b3a4a', hair: '#ffb3c8', iris: '#7a3cff', brows: '#a0606f', blush: '#ff5c8a', visor: '#ff8fb1', outline: '#4a2a36' },
   forest: { jacket: '#3d5a40', jacket_trim: '#f2c14e', jacket_glow: '#f2c14e', shorts: '#6b4f36', shorts_trim: '#f2c14e', shorts_cuff: '#f2c14e', shorts_tab: '#f2c14e', innershirt: '#e9e2cf', tights: '#2a2a22', turtleneck: '#e9e2cf',
     belt: '#2a2a22', buckle: '#f2c14e', shoes: '#6b4f36', shoes_accent: '#f2c14e', shoes_laces: '#e9e2cf', shoes_lining: '#2a2a22', badge: '#e9e2cf', badge_trim: '#3d5a40', badge_text: '#2a2a22', hair: '#8a5a2b', iris: '#3f8f4f', skin: '#e8b892', visor: '#f2c14e', outline: '#1f2a1f' },
+  /** Tour-only Jensen Huang leather jacket — black, muted trim, no neon glow. */
+  huang: { jacket: '#0c0c0e', jacket_trim: '#1a1a1e', jacket_glow: '#0c0c0e', shorts: '#141418', shorts_trim: '#1a1a1e', shorts_cuff: '#1a1a1e', shorts_tab: '#1a1a1e', innershirt: '#09090b', tights: '#09090b', turtleneck: '#0a0a0c',
+    belt: '#09090b', buckle: '#3a3a40', shoes: '#0c0c0e', shoes_accent: '#1a1a1e', shoes_laces: '#2a2a30', shoes_lining: '#09090b', badge: '#141418', badge_trim: '#2a2a30', badge_text: '#e8e8ef', visor: '#1a1a1e', outline: '#050506' },
 };
 export class MillieColors {
   constructor(vrm, meta, baseUrl = './assets/') { this.vrm = vrm; this.meta = meta; this.base = baseUrl; this.cur = {}; this.dirty = new Set(); this.ready = false; }
@@ -51,6 +54,61 @@ export class MillieColors {
   setColor(region, hex) { if (!(region in this.cur) && region !== 'outline' && region !== 'visor') throw new Error('unknown region ' + region); this.cur[region] = hex; this.dirty.add(region); this._schedule(); }
   setPalette(p, opt = {}) { if (typeof p === 'string') p = this.presets()[p]; if (opt.reset && p !== this.meta.presets.original) this.setPalette(this.meta.presets.original); for (const [k, v] of Object.entries(p)) if (k in this.cur || k === 'outline' || k === 'visor') { this.cur[k] = v; this.dirty.add(k); } this._schedule(); }
   reset() { this.setPalette(this.meta.presets[this.meta.palette]); }
+  /**
+   * Swap the body diffuse for a pre-baked atlas with the Nebius Desk chest mark
+   * (dark mark + lime accent — cream SVG is invisible on the cream badge).
+   */
+  async applyBrandedBody(atlasUrl = '/millie/atlas_body_branded.webp') {
+    const A = this.atlas.body;
+    if (!this.ready || !A) return false;
+    try {
+      const bmp = await createImageBitmap(await (await fetch(atlasUrl)).blob(), {
+        premultiplyAlpha: 'none',
+        colorSpaceConversion: 'none',
+      });
+      const g = A.canvas.getContext('2d', { willReadFrequently: true });
+      g.imageSmoothingEnabled = false;
+      g.clearRect(0, 0, A.w, A.h);
+      g.drawImage(bmp, 0, 0, A.w, A.h);
+      bmp.close?.();
+      const img = g.getImageData(0, 0, A.w, A.h);
+      A.orig.set(img.data);
+      // Freeze former AI lettering so palette remaps cannot restore it.
+      const idText = this.ids.badge_text;
+      const misc = this.ids.misc ?? 0;
+      if (A.label && idText != null) {
+        for (let i = 0; i < A.label.length; i++) if (A.label[i] === idText) A.label[i] = misc;
+      }
+      for (const t of A.textures) {
+        t.image = A.canvas;
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.needsUpdate = true;
+      }
+    } catch {
+      return false;
+    }
+
+    const E = this.atlas.body_emit;
+    const idBadge = this.ids.badge, idText = this.ids.badge_text;
+    if (E?.orig && E.label && idBadge != null) {
+      const misc = this.ids.misc ?? 0;
+      for (let i = 0, p = 0; i < E.label.length; i++, p += 4) {
+        if (E.label[i] !== idText && E.label[i] !== idBadge) continue;
+        E.orig[p] = 0; E.orig[p + 1] = 0; E.orig[p + 2] = 0;
+        E.label[i] = misc;
+      }
+      const eg = E.canvas.getContext('2d');
+      const eimg = eg.createImageData(E.w, E.h);
+      eimg.data.set(E.orig);
+      eg.putImageData(eimg, 0, 0);
+      for (const t of E.textures) { t.image = E.canvas; t.needsUpdate = true; }
+    }
+    return true;
+  }
+  /** @deprecated prefer applyBrandedBody — kept as alias for older call sites. */
+  async stampChestLogo(logoUrl) {
+    return this.applyBrandedBody(typeof logoUrl === 'string' && logoUrl.endsWith('.webp') ? logoUrl : '/millie/atlas_body_branded.webp');
+  }
   _schedule() { if (this._t) return; this._t = Promise.resolve().then(() => { this._t = null; this.applyNow(); }); }
   applyNow() {
     const D = this.dirty; this.dirty = new Set(); if (!D.size) return;

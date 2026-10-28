@@ -13,9 +13,11 @@ import {
 } from "./guideActions";
 import type { MillieHandle } from "./MillieCanvas";
 import { readGuideSession, writeGuideSession } from "./millieStorage";
+import { labelForTarget, type TourLang } from "./millieTour";
 import { clipForReaction, pickSafeClip, pickSafeReaction, reactionForGuide } from "./safeMotion";
 
-export type GuideMsg = { role: "user" | "assistant"; content: string };
+/** Only Millie's spoken lines — never the user's question. */
+export type GuideMsg = { role: "assistant"; content: string };
 
 function displayGuideText(raw: string): string {
   const cut = raw.lastIndexOf("```guide");
@@ -40,24 +42,63 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
   }, [deviceId]);
 
   const applyActions = useCallback(
-    (actions: GuideAction[]) => {
+    (actions: GuideAction[], traceId?: string | null) => {
+      const switched = actions.some((a) => a.type === "select_board");
+      const applied: Array<GuideAction & { status: string; reason?: string }> = [];
       for (const action of actions) {
         if (action.type === "react") {
           const emotion = pickSafeReaction(action.emotion);
           millieRef.current?.react(emotion, 3.4, 1);
           millieRef.current?.play(clipForReaction(emotion));
+          applied.push({ ...action, emotion, status: "applied" });
           continue;
         }
-        guide.runAction(action);
+        try {
+          guide.runAction(action);
+          applied.push({ ...action, status: "applied" });
+        } catch (err) {
+          applied.push({
+            ...action,
+            status: "rejected",
+            reason: err instanceof Error ? err.message.slice(0, 80) : "apply_failed",
+          });
+        }
         if (action.type === "highlight") {
-          window.setTimeout(() => {
-            const el = guide.queryGuideTarget(action.target);
-            millieRef.current?.pointAt(el);
-          }, 120);
+          const lang: TourLang =
+            typeof navigator !== "undefined" && navigator.language.toLowerCase().startsWith("es") ? "es" : "en";
+          guide.setHighlightLabel(labelForTarget(action.target, lang));
+          // Overlay also aims on highlightTarget — only re-aim here after a board remount.
+          if (switched) {
+            window.setTimeout(() => {
+              const el = guide.queryGuideTarget(action.target);
+              millieRef.current?.pointAt(el);
+            }, 400);
+          }
         }
       }
+      void api()
+        .reportGuideApply({
+          trace_id: traceId,
+          session_id: sessionRef.current,
+          device_id: deviceId,
+          actions: applied.map((a) => {
+            const row: {
+              type: string;
+              target?: string;
+              board?: string;
+              emotion?: string;
+              status?: string;
+              reason?: string;
+            } = { type: a.type, status: a.status, reason: a.reason };
+            if ("target" in a && typeof a.target === "string") row.target = a.target;
+            if ("board" in a && typeof a.board === "string") row.board = a.board;
+            if ("emotion" in a && typeof a.emotion === "string") row.emotion = a.emotion;
+            return row;
+          }),
+        })
+        .catch(() => undefined);
     },
-    [guide, millieRef]
+    [guide, millieRef, deviceId]
   );
 
   const send = useCallback(
@@ -77,7 +118,8 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
         return;
       }
 
-      setMessages((m) => [...m, { role: "user", content }]);
+      // Bubble shows only Millie — keep "…" until her spoken line arrives.
+      setPending("…");
       millieRef.current?.react("thinking", 8, 0.95);
       millieRef.current?.play(pickSafeClip("thinking"));
 
@@ -86,36 +128,80 @@ export function useMillieGuide(deviceId: string | null, millieRef: RefObject<Mil
       abortRef.current = ac;
       let raw = "";
       const queued: GuideAction[] = [];
+      const norm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}\s]/gu, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      const userNorm = norm(content);
+      const notEcho = (spoken: string) => {
+        const a = norm(spoken);
+        if (!a || a === "…" || a === "...") return false;
+        if (!userNorm) return true;
+        if (a === userNorm) return false;
+        if (a.length <= userNorm.length + 8 && (userNorm.includes(a) || a.includes(userNorm))) return false;
+        return true;
+      };
+
+      // Best-effort board hints (names only) — Millie answers without opening panels blindly.
+      let desk: { secret_names?: string[]; expert_names?: string[] } | undefined;
+      try {
+        const [secrets, brains] = await Promise.all([
+          api().listSecrets().catch(() => [] as Array<{ name: string }>),
+          api().listBrains().catch(() => [] as Array<{ name: string; device_id?: string | null }>),
+        ]);
+        desk = {
+          secret_names: secrets.map((s) => s.name).filter(Boolean).slice(0, 16),
+          expert_names: brains
+            .filter((b) => !b.device_id || b.device_id === deviceId)
+            .map((b) => b.name)
+            .filter(Boolean)
+            .slice(0, 16),
+        };
+      } catch {
+        desk = undefined;
+      }
 
       try {
         await api().streamGuideMessage(
-          { content, session_id: sessionRef.current, device_id: deviceId },
+          { content, session_id: sessionRef.current, device_id: deviceId, desk },
           (event: GuideTurnEvent) => {
             if (event.type === "start") {
               sessionRef.current = event.session_id;
               writeGuideSession(deviceId, event.session_id);
             } else if (event.type === "delta" && event.kind === "text") {
               raw += event.text;
-              setPending(displayGuideText(raw));
+              const spoken = displayGuideText(raw);
+              if (spoken && notEcho(spoken)) setPending(spoken);
+              else if (spoken) setPending("…");
             } else if (event.type === "action") {
               queued.push(...gateActions([event.action]));
             } else if (event.type === "done") {
-              // Re-parse so a fence-only reply never lands as raw JSON in the bubble.
+              // Prefer server polished content; never fall back to showing the user prompt.
               const parsed = parseGuidePayload(event.message?.content || raw);
               const actions = gateActions(event.actions?.length ? event.actions : queued.length ? queued : parsed.actions);
-              // Nano sometimes emits only the tool fence — still show a spoken line.
-              const cleaned = parsed.text || (actions.length ? captionFromActions(actions) : "");
+              let cleaned = parsed.text || (actions.length ? captionFromActions(actions) : "");
+              if (cleaned && !notEcho(cleaned)) {
+                cleaned = actions.length ? captionFromActions(actions) : "Hey! I'm Millie — what do you need?";
+              }
               const emotion = emotionFromActions(actions) || reactionForGuide(cleaned);
               setPending("");
               if (cleaned) {
-                setMessages((m) => [...m, { role: "assistant", content: cleaned }]);
+                setMessages([{ role: "assistant", content: cleaned }]);
                 millieRef.current?.say(cleaned.slice(0, 280));
               } else {
                 setError("Millie returned an empty reply.");
                 millieRef.current?.react("flustered", 2.5, 1);
               }
-              // Apply nav/highlight; react + matching clip drive face/body.
-              applyActions(actions.some((a) => a.type === "react") ? actions : [...actions, { type: "react", emotion }]);
+              const traceId =
+                typeof (event as { trace_id?: string }).trace_id === "string"
+                  ? (event as { trace_id?: string }).trace_id
+                  : null;
+              applyActions(
+                actions.some((a) => a.type === "react") ? actions : [...actions, { type: "react", emotion }],
+                traceId
+              );
             } else if (event.type === "error") {
               setError(event.detail);
               millieRef.current?.react("apologetic", 2.8, 1);

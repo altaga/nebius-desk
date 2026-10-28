@@ -2,14 +2,18 @@
 
 export const GUIDE_ACTION_TYPES = [
   "open_chat",
+  "new_chat",
   "open_machine",
   "open_terminal",
   "open_files",
+  "open_browser",
+  "open_services",
   "open_health",
   "open_panel",
   "open_board",
   "open_plan",
   "open_nav",
+  "select_board",
   "highlight",
   "react",
 ] as const;
@@ -37,12 +41,14 @@ export type GuideEmotion =
   | "sad";
 
 export type GuideTarget =
+  | "nav.fleet"
   | "nav.open_machine"
   | "nav.new_chat"
   | "nav.pair"
   | "machine.health"
   | "machine.terminal"
   | "machine.files"
+  | "machine.services"
   | "panel.chat"
   | "panel.board"
   | "panel.plan"
@@ -50,20 +56,24 @@ export type GuideTarget =
   | "board.memory"
   | "board.experts"
   | "board.secrets"
-  | "chat.model_picker";
+  | "chat.model_picker"
+  | "chat.composer";
 
 export type GuideAction =
-  | { type: Exclude<GuideActionType, "highlight" | "react"> }
+  | { type: Exclude<GuideActionType, "highlight" | "react" | "select_board"> }
+  | { type: "select_board"; board: string }
   | { type: "highlight"; target: GuideTarget }
   | { type: "react"; emotion: GuideEmotion };
 
 const TARGETS = new Set<string>([
+  "nav.fleet",
   "nav.open_machine",
   "nav.new_chat",
   "nav.pair",
   "machine.health",
   "machine.terminal",
   "machine.files",
+  "machine.services",
   "panel.chat",
   "panel.board",
   "panel.plan",
@@ -72,6 +82,7 @@ const TARGETS = new Set<string>([
   "board.experts",
   "board.secrets",
   "chat.model_picker",
+  "chat.composer",
 ]);
 
 const EMOTIONS = new Set<string>([
@@ -99,7 +110,7 @@ const TYPES = new Set<string>(GUIDE_ACTION_TYPES);
 
 export function isGuideAction(value: unknown): value is GuideAction {
   if (!value || typeof value !== "object") return false;
-  const row = value as { type?: unknown; target?: unknown; emotion?: unknown; name?: unknown };
+  const row = value as { type?: unknown; target?: unknown; emotion?: unknown; name?: unknown; board?: unknown };
   if (typeof row.type !== "string" || !TYPES.has(row.type)) return false;
   if (row.type === "highlight") {
     return typeof row.target === "string" && TARGETS.has(row.target);
@@ -107,6 +118,10 @@ export function isGuideAction(value: unknown): value is GuideAction {
   if (row.type === "react") {
     const emotion = typeof row.emotion === "string" ? row.emotion : typeof row.name === "string" ? row.name : null;
     return !!emotion && EMOTIONS.has(emotion);
+  }
+  if (row.type === "select_board") {
+    const board = typeof row.board === "string" ? row.board : typeof row.name === "string" ? row.name : null;
+    return !!board && board.trim().length > 0 && board.trim().length <= 64;
   }
   // Nano sometimes attaches a target to open_*; ignore extras.
   return true;
@@ -136,6 +151,17 @@ export function gateActions(raw: unknown[]): GuideAction[] {
       out.push({ type: "highlight", target: item.target });
       continue;
     }
+    if (item.type === "select_board") {
+      const row = item as { board?: string; name?: string };
+      const board = (row.board || row.name || "").trim();
+      if (board) out.push({ type: "select_board", board });
+      continue;
+    }
+    // Alias: open_services → open_browser (Services tab).
+    if (item.type === "open_services") {
+      out.push({ type: "open_browser" });
+      continue;
+    }
     // Drop any hallucinated target/emotion on nav opens.
     out.push({ type: item.type });
   }
@@ -155,6 +181,7 @@ export function parseGuidePayload(text: string): { text: string; actions: GuideA
   });
   // Unclosed trailing fence — never show tool JSON in the bubble.
   cleaned = cleaned.replace(/```guide\s*[\s\S]*$/i, "");
+  cleaned = cleaned.replace(/^\s*\d+[.)]\s+/gm, "");
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
 
   if (!actions.length && (cleaned.startsWith("{") || cleaned.startsWith("["))) {
@@ -186,12 +213,19 @@ export function captionFromActions(actions: GuideAction[]): string {
       labels.push(`pointing at ${tip}`);
       continue;
     }
+    if (a.type === "select_board") {
+      labels.push(`switched to ${a.board}`);
+      continue;
+    }
     const map: Record<string, string> = {
       open_chat: "opened Chat",
+      new_chat: "started a new chat",
       open_machine: "opened Machine",
       open_health: "opened Health",
       open_terminal: "opened Terminal",
       open_files: "opened Files",
+      open_browser: "opened Services",
+      open_services: "opened Services",
       open_panel: "opened the panel",
       open_board: "opened Board",
       open_plan: "opened Plan",
@@ -202,6 +236,6 @@ export function captionFromActions(actions: GuideAction[]): string {
   const unique = [...new Set(labels)];
   const head = unique[0] || "did that";
   const rest = unique.slice(1);
-  if (!rest.length) return `Done — ${head}.`;
-  return `Done — ${head}, ${rest.join(", ")}.`;
+  if (!rest.length) return `Done! ${head.charAt(0).toUpperCase()}${head.slice(1)}.`;
+  return `Done! ${head}, ${rest.join(", ")}.`;
 }
