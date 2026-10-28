@@ -459,15 +459,50 @@ export class MillieController {
     const base = Float32Array.from(pos.array), off = new Float32Array(base.length);
     const v = new THREE.Vector3(), dir = new THREE.Vector3(), lat = new THREE.Vector3();
     const sm = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-    for (const vi of new Set(tri)) {
-      v.fromBufferAttribute(pos, vi).applyMatrix4(o.bindMatrix);
+    // Overall loose fit: inflate away from the nearest torso/arm bone segment.
+    const chain = (names) => names.map(pt);
+    const segs = [];
+    let torsoSegs = 0;
+    for (const c of [chain(['hips', 'spine', 'chest', 'upperChest', 'neck']), chain(['leftUpperArm', 'leftLowerArm', 'leftHand']), chain(['rightUpperArm', 'rightLowerArm', 'rightHand'])]) {
+      const pts = c.filter(Boolean);
+      for (let i = 0; i + 1 < pts.length; i++) segs.push(new THREE.Line3(pts[i], pts[i + 1]));
+      torsoSegs ||= segs.length;
+    }
+    const near = new THREE.Vector3();
+    const verts = [...new Set(tri)].map((vi) => {
+      const p = new THREE.Vector3().fromBufferAttribute(pos, vi).applyMatrix4(o.bindMatrix);
+      let bd = Infinity, bi = -1;
+      const best = new THREE.Vector3();
+      segs.forEach((s, si) => { s.closestPointToPoint(p, true, near); const d = near.distanceToSquared(p); if (d < bd) { bd = d; bi = si; best.copy(near); } });
+      return { vi, p, best, bd, torso: bi >= 0 && bi < torsoSegs };
+    });
+    // Longer hem (no crop-top): lower torso stretches down and flares over the belt.
+    let hemY = Infinity;
+    for (const q of verts) if (q.torso) hemY = Math.min(hemY, q.p.y);
+    const torsoH = Math.max(1e-4, L.y - hemY), drop = torsoH * 0.32;
+    for (const { vi, p, best, bd, torso } of verts) {
+      v.copy(p);
+      if (bd < Infinity && bd > 1e-10) {
+        dir.subVectors(v, best).normalize().multiplyScalar(span * 0.045).applyMatrix3(toLocal);
+        off[vi * 3] += dir.x; off[vi * 3 + 1] += dir.y; off[vi * 3 + 2] += dir.z;
+      }
+      if (torso && hemY < Infinity) {
+        const w = sm(hemY + torsoH * 0.45, hemY, v.y);
+        if (w > 0) {
+          dir.set(v.x - best.x, 0, v.z - best.z);
+          if (dir.lengthSq() > 1e-10) dir.normalize().multiplyScalar(span * 0.06 * w);
+          dir.y = -drop * w;
+          dir.applyMatrix3(toLocal);
+          off[vi * 3] += dir.x; off[vi * 3 + 1] += dir.y; off[vi * 3 + 2] += dir.z;
+        }
+      }
       for (const S of [L, R]) {
         const d = v.distanceTo(S); if (d >= rad) continue;
         const w = sm(rad, rad * 0.25, d) * sm(S.y - rad * 0.55, S.y + rad * 0.15, v.y);
         if (w <= 0) continue;
         dir.subVectors(v, S).normalize();
         lat.set(S.x - mid.x, 0, 0).normalize();
-        dir.multiplyScalar(0.1).add(lat.multiplyScalar(0.07)).addScaledVector(new THREE.Vector3(0, 1, 0), 0.07)
+        dir.multiplyScalar(0.12).add(lat.multiplyScalar(0.08)).addScaledVector(new THREE.Vector3(0, 1, 0), 0.08)
           .multiplyScalar(span * w).applyMatrix3(toLocal);
         off[vi * 3] += dir.x; off[vi * 3 + 1] += dir.y; off[vi * 3 + 2] += dir.z;
       }
