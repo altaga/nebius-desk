@@ -320,7 +320,7 @@ export class MillieController {
    */
   setTourLook(on) {
     // Drop older glasses meshes (box / mis-fitted sprite revs).
-    if (this._tourGlasses && this._glassesRev !== 5) {
+    if (this._tourGlasses && this._glassesRev !== 6) {
       this._tourGlasses.parent?.remove(this._tourGlasses);
       this._tourGlasses.traverse?.((o) => {
         o.geometry?.dispose?.();
@@ -332,6 +332,13 @@ export class MillieController {
     }
     const g = this._ensureTourGlasses();
     this._fitGlassesToEyes();
+    // Snapshot jacket only — full reset() would remap hair/skin from Nebius preset.
+    if (on && this.colors?.cur && !this._tourJacketSnap) {
+      const c = this.colors.cur;
+      this._tourJacketSnap = {
+        jacket: c.jacket, jacket_trim: c.jacket_trim, jacket_glow: c.jacket_glow,
+      };
+    }
     const was = this._tourLook?.on;
     let t0 = 0;
     if (this._tourLook && was === !on) t0 = Math.max(0, 1 - this._tourLook.t / this._tourLook.dur) * (on ? 0.75 : 0.55);
@@ -346,6 +353,17 @@ export class MillieController {
       }
     }
     return this;
+  }
+  _restoreTourJacket() {
+    if (!this.colors) return;
+    if (this._tourJacketSnap) this.colors.setPalette(this._tourJacketSnap);
+    else {
+      const n = this.colors.presets().nebius || {};
+      this.colors.setPalette({
+        jacket: n.jacket, jacket_trim: n.jacket_trim, jacket_glow: n.jacket_glow,
+      });
+    }
+    this._tourJacketSnap = null;
   }
   /** Hi-res canvas sprite: thin black rectangular frames (Jensen Huang signature). */
   _makeJensenGlassesTexture() {
@@ -366,11 +384,11 @@ export class MillieController {
       ctx.closePath();
     };
 
-    // Layout: two lenses + thin bridge (Jensen proportions — wide, low rectangles).
-    const padX = 70, padY = 70;
-    const bridgeW = 56;
+    // Layout: two lenses + thin bridge — fill the canvas so sides cover chibi eyes.
+    const padX = 24, padY = 64;
+    const bridgeW = 44;
     const frameW = (W - padX * 2 - bridgeW) / 2;
-    const frameH = 210;
+    const frameH = 220;
     const stroke = 14; // thin acetate rim
     const r = 18;
     const y0 = (H - frameH) / 2;
@@ -424,14 +442,14 @@ export class MillieController {
     ctx.lineTo(rightX - 8, by + 22);
     ctx.stroke();
 
-    // Short temple hints (perspective stubs)
-    ctx.lineWidth = 10;
+    // Temple arms — longer stubs so the sides read wider on the chibi face.
+    ctx.lineWidth = 11;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(leftX + 4, y0 + frameH * 0.42);
-    ctx.lineTo(leftX - 36, y0 + frameH * 0.4);
-    ctx.moveTo(rightX + frameW - 4, y0 + frameH * 0.42);
-    ctx.lineTo(rightX + frameW + 36, y0 + frameH * 0.4);
+    ctx.moveTo(leftX + 2, y0 + frameH * 0.42);
+    ctx.lineTo(Math.max(4, leftX - 18), y0 + frameH * 0.38);
+    ctx.moveTo(rightX + frameW - 2, y0 + frameH * 0.42);
+    ctx.lineTo(Math.min(W - 4, rightX + frameW + 18), y0 + frameH * 0.38);
     ctx.stroke();
 
     const tex = new THREE.CanvasTexture(cv);
@@ -463,7 +481,7 @@ export class MillieController {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), out);
     if (!this._glassesHome) this._glassesHome = { pos: mid.clone(), quat: q.clone() };
     else { this._glassesHome.pos.copy(mid); this._glassesHome.quat.copy(q); }
-    const planeW = span * 2.95;
+    const planeW = span * 4.05;
     const planeH = planeW * (420 / 1024);
     const geom = this._tourGlasses.geometry;
     const curW = geom?.parameters?.width ?? 0;
@@ -491,7 +509,7 @@ export class MillieController {
     mesh.visible = false;
     head.add(mesh);
 
-    this._glassesRev = 5;
+    this._glassesRev = 6;
     this._tourGlasses = mesh;
     this._glassesMat = mat;
     this._fitGlassesToEyes();
@@ -542,7 +560,7 @@ export class MillieController {
           a.jacketStep = 2;
         }
       } else if (a.jacketStep < 1 && u >= 0.25) {
-        this.colors.reset();
+        this._restoreTourJacket();
         a.jacketStep = 1;
       }
     }
@@ -562,7 +580,7 @@ export class MillieController {
         }
       }
       if (a.on && this.colors && a.jacketStep < 2) this.colors.setPalette('huang');
-      if (!a.on && this.colors) this.colors.reset();
+      if (!a.on && this.colors && a.jacketStep < 1) this._restoreTourJacket();
       this._tourLook = null;
     }
   }
