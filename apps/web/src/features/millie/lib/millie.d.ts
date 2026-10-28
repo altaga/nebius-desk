@@ -24,6 +24,7 @@ export class MillieController {
     stampChestLogo?: (logoUrl?: string) => Promise<boolean>;
     setPalette?: (p: string | Record<string, string>, opt?: { reset?: boolean }) => void;
     reset?: () => void;
+    boostLeatherJacket?: () => boolean;
   };
   initColors?(url: string): Promise<void>;
   /** Tour-only: animated black jacket + Jensen glasses. Off restores Nebius look. */

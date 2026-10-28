@@ -552,11 +552,12 @@ export class MillieController {
     if (this.colors) {
       if (a.on) {
         if (a.jacketStep < 1 && u >= 0.2) {
-          this.colors.setPalette({ jacket: '#4a4a52', jacket_trim: '#3a3a42', jacket_glow: '#2a2a30' });
+          this.colors.setPalette({ jacket: '#1a1a20', jacket_trim: '#3a3a48', jacket_glow: '#2a3038' });
           a.jacketStep = 1;
         }
         if (a.jacketStep < 2 && u >= 0.45) {
           this.colors.setPalette('huang');
+          this.colors.boostLeatherJacket?.();
           a.jacketStep = 2;
         }
       } else if (a.jacketStep < 1 && u >= 0.25) {
@@ -579,7 +580,10 @@ export class MillieController {
           if (this._glassesMat) this._glassesMat.opacity = 1;
         }
       }
-      if (a.on && this.colors && a.jacketStep < 2) this.colors.setPalette('huang');
+      if (a.on && this.colors && a.jacketStep < 2) {
+        this.colors.setPalette('huang');
+        this.colors.boostLeatherJacket?.();
+      }
       if (!a.on && this.colors && a.jacketStep < 1) this._restoreTourJacket();
       this._tourLook = null;
     }

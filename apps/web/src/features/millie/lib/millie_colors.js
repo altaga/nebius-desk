@@ -13,8 +13,8 @@ export const EXTRA_PRESETS = {
     belt: '#5b3a4a', buckle: '#ffffff', shoes: '#ffffff', shoes_accent: '#ff8fb1', shoes_laces: '#e6b8c6', shoes_lining: '#5b3a4a', badge: '#ffffff', badge_trim: '#ff8fb1', badge_text: '#5b3a4a', hair: '#ffb3c8', iris: '#7a3cff', brows: '#a0606f', blush: '#ff5c8a', visor: '#ff8fb1', outline: '#4a2a36' },
   forest: { jacket: '#3d5a40', jacket_trim: '#f2c14e', jacket_glow: '#f2c14e', shorts: '#6b4f36', shorts_trim: '#f2c14e', shorts_cuff: '#f2c14e', shorts_tab: '#f2c14e', innershirt: '#e9e2cf', tights: '#2a2a22', turtleneck: '#e9e2cf',
     belt: '#2a2a22', buckle: '#f2c14e', shoes: '#6b4f36', shoes_accent: '#f2c14e', shoes_laces: '#e9e2cf', shoes_lining: '#2a2a22', badge: '#e9e2cf', badge_trim: '#3d5a40', badge_text: '#2a2a22', hair: '#8a5a2b', iris: '#3f8f4f', skin: '#e8b892', visor: '#f2c14e', outline: '#1f2a1f' },
-  /** Tour-only: black leather jacket only — rest stays Nebius. */
-  huang: { jacket: '#0c0c0e', jacket_trim: '#1c1c22', jacket_glow: '#0c0c0e' },
+  /** Tour-only: exaggerated black leather — deep body, lit seams, cool sheen. */
+  huang: { jacket: '#050508', jacket_trim: '#6a6a78', jacket_glow: '#3a4250' },
 };
 export class MillieColors {
   constructor(vrm, meta, baseUrl = './assets/') { this.vrm = vrm; this.meta = meta; this.base = baseUrl; this.cur = {}; this.dirty = new Set(); this.ready = false; }
@@ -53,6 +53,50 @@ export class MillieColors {
   setColor(region, hex) { if (!(region in this.cur) && region !== 'outline' && region !== 'visor') throw new Error('unknown region ' + region); this.cur[region] = hex; this.dirty.add(region); this._schedule(); }
   setPalette(p, opt = {}) { if (typeof p === 'string') p = this.presets()[p]; if (opt.reset && p !== this.meta.presets.original) this.setPalette(this.meta.presets.original); for (const [k, v] of Object.entries(p)) if (k in this.cur || k === 'outline' || k === 'visor') { this.cur[k] = v; this.dirty.add(k); } this._schedule(); }
   reset() { this.setPalette(this.meta.presets[this.meta.palette]); }
+  /**
+   * Extra leather punch after huang palette: crush jacket shadows, keep sparse
+   * cool highlights so folds read as black leather (not flat charcoal).
+   */
+  boostLeatherJacket() {
+    const A = this.atlas.body;
+    if (!this.ready || !A?.label || !A.canvas) return false;
+    const idJ = this.ids.jacket, idT = this.ids.jacket_trim, idG = this.ids.jacket_glow;
+    const g = A.canvas.getContext('2d', { willReadFrequently: true });
+    const img = g.getImageData(0, 0, A.w, A.h);
+    const d = img.data;
+    for (let i = 0, p = 0; i < A.label.length; i++, p += 4) {
+      const id = A.label[i];
+      if (id !== idJ && id !== idT && id !== idG) continue;
+      if (d[p + 3] === 0) continue;
+      let r = d[p] / 255, gg = d[p + 1] / 255, b = d[p + 2] / 255;
+      let L = r * 0.2126 + gg * 0.7152 + b * 0.0722;
+      // Power crush → deep blacks; sparse highs stay as leather glare.
+      L = Math.pow(Math.max(L, 1e-4), id === idT ? 1.15 : 1.75);
+      if (id === idG) L = Math.min(1, L * 1.35 + 0.04);
+      if (id === idT) L = Math.min(1, L * 1.25 + 0.06);
+      // Cool charcoal tint (not brown).
+      d[p] = Math.min(255, L * 255 * 0.78);
+      d[p + 1] = Math.min(255, L * 255 * 0.82);
+      d[p + 2] = Math.min(255, L * 255 * 0.92);
+    }
+    g.putImageData(img, 0, 0);
+    for (const t of A.textures) { t.image = A.canvas; t.needsUpdate = true; }
+
+    const E = this.atlas.body_emit;
+    if (E?.label && E.canvas && idG != null) {
+      const eg = E.canvas.getContext('2d', { willReadFrequently: true });
+      const eimg = eg.getImageData(0, 0, E.w, E.h);
+      const ed = eimg.data;
+      for (let i = 0, p = 0; i < E.label.length; i++, p += 4) {
+        if (E.label[i] !== idG || ed[p + 3] === 0) continue;
+        // Soft cool rim on glow stripes — leather catch-light, not neon.
+        ed[p] = 28; ed[p + 1] = 34; ed[p + 2] = 48; ed[p + 3] = 255;
+      }
+      eg.putImageData(eimg, 0, 0);
+      for (const t of E.textures) { t.image = E.canvas; t.needsUpdate = true; }
+    }
+    return true;
+  }
   /**
    * Swap the body diffuse for a pre-baked atlas with the Nebius Desk chest mark
    * (dark mark + lime accent — cream SVG is invisible on the cream badge).
