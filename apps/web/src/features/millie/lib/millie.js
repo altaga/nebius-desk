@@ -344,44 +344,50 @@ export class MillieController {
   _ensureTourGlasses() {
     if (this._tourGlasses) return this._tourGlasses;
     const head = this.bone('head');
-    if (!head || !this.camera) return null;
+    if (!head) return null;
     head.updateWorldMatrix(true, false);
 
-    const frameMat = new THREE.MeshStandardMaterial({
-      color: 0x0a0a0a, roughness: 0.25, metalness: 0.2, roughness: 0.45,
-    });
-    const lensMat = new THREE.MeshStandardMaterial({
-      color: 0x121218, transparent: true, opacity: 0.42, roughness: 0.55,
-      metalness: 0.05, roughness: 0.15, side: THREE.DoubleSide, depthWrite: false,
+    // Unlit + no depth test: bangs/eye cards otherwise bury the frames on this chibi.
+    const frameMat = new THREE.MeshBasicMaterial({ color: 0x050508, depthTest: false });
+    const lensMat = new THREE.MeshBasicMaterial({
+      color: 0x1a1a22, transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthTest: false, depthWrite: false,
     });
 
     const le = this.bone('leftEye'), re = this.bone('rightEye');
-    let mid = new THREE.Vector3(0, 0.055, 0);
-    let half = 0.03;
+    let mid = new THREE.Vector3(0, 0.06, 0.05 * this.s0);
+    let half = 0.038;
     if (le && re) {
       const lp = head.worldToLocal(le.getWorldPosition(new THREE.Vector3()));
       const rp = head.worldToLocal(re.getWorldPosition(new THREE.Vector3()));
       mid = lp.clone().add(rp).multiplyScalar(0.5);
-      half = Math.max(Math.abs(lp.x - rp.x) * 0.5, 0.018);
+      half = Math.max(Math.abs(lp.x - rp.x) * 0.55, 0.032);
     }
-    // Sit slightly toward the camera so lenses clear lashes regardless of VRM0/1 face axis.
-    const toCam = this.camera.position.clone().sub(head.getWorldPosition(new THREE.Vector3())).normalize();
-    const fwd = toCam.applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()).invert());
-    mid.addScaledVector(fwd, 0.016);
+    // Push past the eye cards / lashes so rims aren't buried in the face mesh.
+    const out = mid.clone();
+    out.y *= 0.15;
+    if (out.lengthSq() < 1e-8) out.set(0, 0, this.s0);
+    else out.normalize();
+    mid.addScaledVector(out, 0.055);
 
-    const lensW = half * 1.05, lensH = lensW * 0.7, thick = Math.max(lensW * 0.14, 0.0035), depth = thick * 1.1;
+    // Jensen-style: oversized rectangular frames relative to eye span.
+    const lensW = half * 1.55, lensH = lensW * 0.62, thick = Math.max(lensW * 0.18, 0.0055), depth = thick * 1.35;
+    const tag = (mesh) => {
+      mesh.frustumCulled = false;
+      mesh.renderOrder = 20;
+      return mesh;
+    };
     const rim = (ox) => {
       const g = new THREE.Group();
-      const top = new THREE.Mesh(new THREE.BoxGeometry(lensW + thick, thick, depth), frameMat);
+      const top = tag(new THREE.Mesh(new THREE.BoxGeometry(lensW + thick, thick, depth), frameMat));
       top.position.y = lensH * 0.5;
-      const bot = new THREE.Mesh(new THREE.BoxGeometry(lensW + thick, thick * 0.85, depth), frameMat);
+      const bot = tag(new THREE.Mesh(new THREE.BoxGeometry(lensW + thick, thick * 0.9, depth), frameMat));
       bot.position.y = -lensH * 0.5;
-      const L = new THREE.Mesh(new THREE.BoxGeometry(thick, lensH, depth), frameMat);
+      const L = tag(new THREE.Mesh(new THREE.BoxGeometry(thick, lensH, depth), frameMat));
       L.position.x = -lensW * 0.5;
-      const R = new THREE.Mesh(new THREE.BoxGeometry(thick, lensH, depth), frameMat);
+      const R = tag(new THREE.Mesh(new THREE.BoxGeometry(thick, lensH, depth), frameMat));
       R.position.x = lensW * 0.5;
-      const lens = new THREE.Mesh(new THREE.PlaneGeometry(lensW * 0.92, lensH * 0.88), lensMat);
-      lens.position.z = depth * 0.15;
+      const lens = tag(new THREE.Mesh(new THREE.PlaneGeometry(lensW * 0.9, lensH * 0.86), lensMat));
+      lens.position.z = depth * 0.2;
       g.add(top, bot, L, R, lens);
       g.position.set(ox, 0, 0);
       return g;
@@ -389,19 +395,22 @@ export class MillieController {
 
     const group = new THREE.Group();
     group.name = 'MillieTourGlasses';
-    group.add(rim(-half * 1.05), rim(half * 1.05));
-    const bridge = new THREE.Mesh(new THREE.BoxGeometry(half * 0.35, thick * 0.7, depth * 0.8), frameMat);
+    group.frustumCulled = false;
+    group.add(rim(-half * 1.12), rim(half * 1.12));
+    const bridge = tag(new THREE.Mesh(new THREE.BoxGeometry(half * 0.42, thick * 0.75, depth * 0.85), frameMat));
     group.add(bridge);
-    const armLen = half * 1.6, armY = lensH * 0.15;
+    const armLen = half * 1.85, armY = lensH * 0.12;
     for (const sx of [-1, 1]) {
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(thick * 0.7, thick * 0.7, armLen), frameMat);
-      arm.position.set(sx * (half * 1.05 + lensW * 0.5), armY, -armLen * 0.45);
+      const arm = tag(new THREE.Mesh(new THREE.BoxGeometry(thick * 0.75, thick * 0.75, armLen), frameMat));
+      // Temples go back into the head (opposite face-out).
+      arm.position.set(sx * (half * 1.12 + lensW * 0.5), armY, -out.z >= 0 ? -armLen * 0.42 : armLen * 0.42);
+      // Align arm length with face-out axis in local Z of the group (built facing +Z).
+      arm.position.z = -armLen * 0.42;
       group.add(arm);
     }
+    // Orient group so local +Z points out of the face.
+    const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), out.clone().normalize());
     group.position.copy(mid);
-    // Face the camera in head space so rectangular frames read front-on.
-    const zAxis = new THREE.Vector3(0, 0, 1);
-    const q = new THREE.Quaternion().setFromUnitVectors(zAxis, fwd.clone().normalize());
     group.quaternion.copy(q);
     group.visible = false;
     group.scale.setScalar(1);
@@ -456,17 +465,11 @@ export class MillieController {
         if (this._glassesLensMat) this._glassesLensMat.opacity = 0.42 * (1 - lift);
       }
     }
-    // Jacket: 2 discrete snaps only (atlas rebuild is expensive).
+    // Jacket only: 2 discrete snaps (atlas rebuild is expensive — never every frame).
     if (this.colors) {
       if (a.on) {
         if (a.jacketStep < 1 && u >= 0.22) {
-          this.colors.setPalette({
-            jacket: '#4a4a52', jacket_trim: '#3a3a42', jacket_glow: '#2a2a30',
-            turtleneck: '#1a1a20', innershirt: '#141418', shorts: '#3a3a42',
-            shorts_trim: '#2a2a30', shorts_cuff: '#2a2a30', shorts_tab: '#2a2a30',
-            shoes: '#2a2a30', shoes_accent: '#1a1a20', badge: '#3a3a42', badge_trim: '#2a2a30',
-            visor: '#2a2a30', outline: '#101014',
-          });
+          this.colors.setPalette({ jacket: '#4a4a52', jacket_trim: '#3a3a42', jacket_glow: '#2a2a30' });
           a.jacketStep = 1;
         }
         if (a.jacketStep < 2 && u >= 0.48) {
