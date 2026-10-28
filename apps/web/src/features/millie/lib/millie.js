@@ -356,6 +356,7 @@ export class MillieController {
   }
   _restoreTourJacket() {
     if (!this.colors) return;
+    this._setLeather(false);
     if (this._tourJacketSnap) this.colors.setPalette(this._tourJacketSnap);
     else {
       const n = this.colors.presets().nebius || {};
@@ -364,6 +365,97 @@ export class MillieController {
       });
     }
     this._tourJacketSnap = null;
+  }
+  _setLeather(on) {
+    this.colors?.setLeather?.(on);
+    for (const s of this._ensureLeatherShell()) s.visible = !!on;
+  }
+  /**
+   * Jacket-only overlay sharing the body skeleton, with a glossy matcap + cool rim so
+   * the leather sheen slides as she turns. M_Body's own matcap/rim mask is shared with
+   * the whole outfit, so the gloss has to live on separate jacket triangles.
+   */
+  _ensureLeatherShell() {
+    if (this._leatherShell) return this._leatherShell;
+    const A = this.colors?.atlas?.body, ids = this.colors?.ids;
+    if (!A?.label || !ids) return [];
+    this._leatherShell = [];
+    const keep = new Set([ids.jacket, ids.jacket_trim, ids.jacket_glow]);
+    const found = [];
+    this.vrm.scene.traverse((o) => {
+      if (!o.isSkinnedMesh || !o.geometry?.index || !o.geometry.attributes.uv) return;
+      const mi = [].concat(o.material).findIndex((m) => m?.name === 'M_Body');
+      if (mi >= 0) found.push([o, mi]);
+    });
+    const fract = (x) => x - Math.floor(x);
+    for (const [o, mi] of found) {
+      const geo = o.geometry, idx = geo.index.array, uv = geo.attributes.uv;
+      const ranges = geo.groups.length ? geo.groups.filter((g) => g.materialIndex === mi) : [{ start: 0, count: idx.length }];
+      const tri = [];
+      for (const r of ranges) {
+        for (let i = r.start; i < r.start + r.count; i += 3) {
+          const a = idx[i], b = idx[i + 1], c = idx[i + 2];
+          const u = fract((uv.getX(a) + uv.getX(b) + uv.getX(c)) / 3), v = fract((uv.getY(a) + uv.getY(b) + uv.getY(c)) / 3);
+          const px = Math.min(A.w - 1, Math.floor(u * A.w)), py = Math.min(A.h - 1, Math.floor(v * A.h));
+          if (keep.has(A.label[py * A.w + px])) tri.push(a, b, c);
+        }
+      }
+      if (!tri.length) continue;
+      const g2 = new THREE.BufferGeometry();
+      for (const [k, attr] of Object.entries(geo.attributes)) g2.setAttribute(k, attr);
+      g2.morphAttributes = geo.morphAttributes;
+      g2.morphTargetsRelative = geo.morphTargetsRelative;
+      g2.setIndex(new THREE.BufferAttribute(new idx.constructor(tri), 1));
+      const srcMat = [].concat(o.material)[mi];
+      const m = new srcMat.constructor();
+      m.copy(srcMat);
+      m.name = 'M_Body_Leather';
+      m.isOutline = false;
+      m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = -1;
+      m.matcapTexture = this._leatherMatcap ??= this._makeLeatherMatcap();
+      m.matcapFactor?.setRGB(1, 1, 1);
+      m.parametricRimColorFactor?.setRGB(0.32, 0.38, 0.5);
+      m.parametricRimFresnelPowerFactor = 3.5;
+      m.parametricRimLiftFactor = 0;
+      m.rimLightingMixFactor = 0.5;
+      m.rimMultiplyTexture = null;
+      m.needsUpdate = true;
+      const s = new THREE.SkinnedMesh(g2, m);
+      s.name = 'MillieLeatherShell';
+      s.bind(o.skeleton, o.bindMatrix);
+      s.bindMode = o.bindMode;
+      s.morphTargetDictionary = o.morphTargetDictionary;
+      s.morphTargetInfluences = o.morphTargetInfluences;
+      s.position.copy(o.position); s.quaternion.copy(o.quaternion); s.scale.copy(o.scale);
+      s.frustumCulled = false;
+      s.renderOrder = o.renderOrder + 1;
+      s.visible = false;
+      o.parent.add(s);
+      this._leatherShell.push(s);
+    }
+    return this._leatherShell;
+  }
+  /** Additive matcap: tight specular, broad cool lobe, grazing edge — semi-gloss leather. */
+  _makeLeatherMatcap() {
+    const N = 256, cv = document.createElement('canvas');
+    cv.width = cv.height = N;
+    const g = cv.getContext('2d');
+    g.fillStyle = '#000'; g.fillRect(0, 0, N, N);
+    const blob = (x, y, r, rgba) => {
+      const gr = g.createRadialGradient(x * N, y * N, 0, x * N, y * N, r * N);
+      gr.addColorStop(0, rgba); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, N, N);
+    };
+    g.globalCompositeOperation = 'lighter';
+    blob(0.4, 0.34, 0.42, 'rgba(46,54,72,1)');
+    blob(0.36, 0.3, 0.11, 'rgba(170,182,210,1)');
+    blob(0.66, 0.7, 0.18, 'rgba(30,36,50,1)');
+    const ring = g.createRadialGradient(N / 2, N / 2, N * 0.36, N / 2, N / 2, N * 0.5);
+    ring.addColorStop(0, 'rgba(0,0,0,0)'); ring.addColorStop(1, 'rgba(84,96,124,1)');
+    g.fillStyle = ring; g.fillRect(0, 0, N, N);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
   }
   /** Hi-res canvas sprite: thin black rectangular frames (Jensen Huang signature). */
   _makeJensenGlassesTexture() {
@@ -557,7 +649,7 @@ export class MillieController {
         }
         if (a.jacketStep < 2 && u >= 0.45) {
           this.colors.setPalette('huang');
-          this.colors.boostLeatherJacket?.();
+          this._setLeather(true);
           a.jacketStep = 2;
         }
       } else if (a.jacketStep < 1 && u >= 0.25) {
@@ -582,7 +674,7 @@ export class MillieController {
       }
       if (a.on && this.colors && a.jacketStep < 2) {
         this.colors.setPalette('huang');
-        this.colors.boostLeatherJacket?.();
+        this._setLeather(true);
       }
       if (!a.on && this.colors && a.jacketStep < 1) this._restoreTourJacket();
       this._tourLook = null;

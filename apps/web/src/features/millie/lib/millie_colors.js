@@ -54,48 +54,48 @@ export class MillieColors {
   setPalette(p, opt = {}) { if (typeof p === 'string') p = this.presets()[p]; if (opt.reset && p !== this.meta.presets.original) this.setPalette(this.meta.presets.original); for (const [k, v] of Object.entries(p)) if (k in this.cur || k === 'outline' || k === 'visor') { this.cur[k] = v; this.dirty.add(k); } this._schedule(); }
   reset() { this.setPalette(this.meta.presets[this.meta.palette]); }
   /**
-   * Extra leather punch after huang palette: crush jacket shadows, keep sparse
-   * cool highlights so folds read as black leather (not flat charcoal).
+   * Black-leather mode for the jacket regions. Applied inside every atlas rebuild
+   * (a one-shot edit would be wiped by the next scheduled applyNow).
    */
-  boostLeatherJacket() {
-    const A = this.atlas.body;
-    if (!this.ready || !A?.label || !A.canvas) return false;
-    const idJ = this.ids.jacket, idT = this.ids.jacket_trim, idG = this.ids.jacket_glow;
-    const g = A.canvas.getContext('2d', { willReadFrequently: true });
-    const img = g.getImageData(0, 0, A.w, A.h);
-    const d = img.data;
-    for (let i = 0, p = 0; i < A.label.length; i++, p += 4) {
-      const id = A.label[i];
-      if (id !== idJ && id !== idT && id !== idG) continue;
-      if (d[p + 3] === 0) continue;
-      let r = d[p] / 255, gg = d[p + 1] / 255, b = d[p + 2] / 255;
-      let L = r * 0.2126 + gg * 0.7152 + b * 0.0722;
-      // Power crush → deep blacks; sparse highs stay as leather glare.
-      L = Math.pow(Math.max(L, 1e-4), id === idT ? 1.15 : 1.75);
-      if (id === idG) L = Math.min(1, L * 1.35 + 0.04);
-      if (id === idT) L = Math.min(1, L * 1.25 + 0.06);
-      // Cool charcoal tint (not brown).
-      d[p] = Math.min(255, L * 255 * 0.78);
-      d[p + 1] = Math.min(255, L * 255 * 0.82);
-      d[p + 2] = Math.min(255, L * 255 * 0.92);
-    }
-    g.putImageData(img, 0, 0);
-    for (const t of A.textures) { t.image = A.canvas; t.needsUpdate = true; }
-
-    const E = this.atlas.body_emit;
-    if (E?.label && E.canvas && idG != null) {
-      const eg = E.canvas.getContext('2d', { willReadFrequently: true });
-      const eimg = eg.getImageData(0, 0, E.w, E.h);
-      const ed = eimg.data;
-      for (let i = 0, p = 0; i < E.label.length; i++, p += 4) {
-        if (E.label[i] !== idG || ed[p + 3] === 0) continue;
-        // Soft cool rim on glow stripes — leather catch-light, not neon.
-        ed[p] = 28; ed[p + 1] = 34; ed[p + 2] = 48; ed[p + 3] = 255;
+  setLeather(on) {
+    on = !!on; if (this.leather === on) return; this.leather = on;
+    for (const n of ['jacket', 'jacket_trim', 'jacket_glow']) this.dirty.add(n);
+    this._schedule();
+  }
+  /** @deprecated use setLeather(true). */
+  boostLeatherJacket() { this.setLeather(true); return true; }
+  // The baked jacket is nearly flat (folds only ~8% under base), so the painted
+  // shading is amplified hard: crushed creases, glints on crease edges, glossy ridges.
+  _leatherPass(A, d) {
+    const src = A.orig, L = A.label, w = A.w, ids = this.ids;
+    const idJ = ids.jacket, idT = ids.jacket_trim, idG = ids.jacket_glow;
+    const lum = p => (src[p] * 0.2126 + src[p + 1] * 0.7152 + src[p + 2] * 0.0722) / 255;
+    const base = {};
+    for (const n of ['jacket', 'jacket_trim', 'jacket_glow']) base[ids[n]] = Math.max(luma(srgb(A.baked[n] || '#e8e8e8')), 1e-3);
+    const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    for (let i = 0, p = 0; i < L.length; i++, p += 4) {
+      const id = L[i]; if ((id !== idJ && id !== idT && id !== idG) || src[p + 3] === 0) continue;
+      const lb = base[id], t = lum(p) / lb - 1;
+      // Crease-edge glint: local luma gradient within the same region.
+      let gx = 0, gy = 0;
+      const x = i % w;
+      if (x > 0 && x < w - 1 && L[i - 1] === id && L[i + 1] === id) gx = (lum(p + 4) - lum(p - 4)) / lb;
+      if (i >= w && i < L.length - w && L[i - w] === id && L[i + w] === id) gy = (lum(p + 4 * w) - lum(p - 4 * w)) / lb;
+      const edge = sm(0.01, 0.06, Math.hypot(gx, gy));
+      let v;
+      if (id === idJ) {
+        const crease = t < 0 ? Math.max(0.12, 1 + t * 7) : 1;
+        v = 0.07 * crease + 0.5 * sm(0.004, 0.06, t) + 0.16 * edge;
+      } else if (id === idT) {
+        // Gunmetal piping / zipper.
+        v = 0.2 * Math.max(0.25, 1 + t * 3) + 0.45 * sm(0.0, 0.08, t) + 0.12 * edge;
+      } else {
+        // Former neon stripes become stitched seams.
+        v = 0.15 + 0.2 * sm(0.0, 0.06, t);
       }
-      eg.putImageData(eimg, 0, 0);
-      for (const t of E.textures) { t.image = E.canvas; t.needsUpdate = true; }
+      v = Math.min(1, v);
+      d[p] = v * 0.9 * 255; d[p + 1] = v * 0.94 * 255; d[p + 2] = Math.min(255, v * 1.08 * 255 + 3);
     }
-    return true;
   }
   /**
    * Swap the body diffuse for a pre-baked atlas with the Nebius Desk chest mark
@@ -167,6 +167,8 @@ export class MillieColors {
         const r = src[p] / 255, gg = src[p + 1] / 255, b = src[p + 2] / 255, lp = r * 0.2126 + gg * 0.7152 + b * 0.0722, t = lp / e.lb, nc = e.nc;
         if (t <= 1) { d[p] = nc[0] * t * 255; d[p + 1] = nc[1] * t * 255; d[p + 2] = nc[2] * t * 255; }
         else { const s = Math.min(1, (lp - e.lb) / Math.max(1 - e.lb, 1e-3)); d[p] = (nc[0] + (1 - nc[0]) * s) * 255; d[p + 1] = (nc[1] + (1 - nc[1]) * s) * 255; d[p + 2] = (nc[2] + (1 - nc[2]) * s) * 255; } }
+      if (this.leather && key === 'body') this._leatherPass(A, d);
+      if (this.leather && key === 'body_emit') { const idG = this.ids.jacket_glow; for (let i = 0, p = 0; i < L.length; i++, p += 4) if (L[i] === idG) { d[p] = 0; d[p + 1] = 0; d[p + 2] = 0; } }
       g.putImageData(img, 0, 0);
       for (const t of A.textures) { t.image = A.canvas; t.needsUpdate = true; }
     }
