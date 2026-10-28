@@ -2,9 +2,9 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  /* Guide dock: compact. Tour uses the taller rule below. */
-  height: min(232px, 34dvh);
-  min-height: 200px;
+  /* Guide dock: clearly smaller than tour (not the same stage). */
+  height: min(176px, 24dvh);
+  min-height: 150px;
   overflow: hidden;
   background: transparent;
   /* Let the overlay drag hit-layer receive pointers. */
@@ -12,8 +12,8 @@
 }
 
 :global([data-tour]) .canvas {
-  height: min(320px, 48dvh);
-  min-height: 280px;
+  height: min(328px, 50dvh);
+  min-height: 290px;
 }
 
 .canvas canvas {
