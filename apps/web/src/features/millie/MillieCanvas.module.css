@@ -2,18 +2,18 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  height: min(248px, 38dvh);
-  min-height: 210px;
+  /* Keep guide + tour stages near the same height so Millie doesn't "shrink/grow". */
+  height: min(286px, 42dvh);
+  min-height: 250px;
   overflow: hidden;
   background: transparent;
   /* Let the overlay drag hit-layer receive pointers. */
   pointer-events: none;
 }
 
-/* Tour: slightly larger figure so she reads between bubble + tour bar. */
 :global([data-tour]) .canvas {
-  height: min(348px, 52dvh);
-  min-height: 300px;
+  height: min(300px, 44dvh);
+  min-height: 268px;
 }
 
 .canvas canvas {

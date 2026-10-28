@@ -1,7 +1,7 @@
 .overlay {
   position: fixed;
   z-index: 80;
-  width: min(260px, calc(100vw - 24px));
+  width: min(280px, calc(100vw - 24px));
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -12,7 +12,7 @@
 
 .overlay[data-tour] {
   z-index: 100;
-  width: min(340px, calc(100vw - 24px));
+  width: min(300px, calc(100vw - 24px));
   /* Soft slide between steps — hard teleports read as jumping. */
   transition: left 420ms cubic-bezier(0.22, 1, 0.36, 1), top 420ms cubic-bezier(0.22, 1, 0.36, 1),
     width 280ms ease;
@@ -174,7 +174,7 @@
   right: 0;
   bottom: 100%;
   z-index: 8;
-  margin: 0 0 10px;
+  margin: 0 0 4px;
   max-height: min(160px, 28dvh);
   overflow: auto;
   padding: 8px 10px;
@@ -215,7 +215,7 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  margin-top: 6px;
+  margin-top: 2px;
   padding: 6px;
   border-radius: 14px;
   background: color-mix(in srgb, var(--bg) 78%, transparent);
