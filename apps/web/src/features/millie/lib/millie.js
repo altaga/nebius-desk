@@ -320,7 +320,7 @@ export class MillieController {
    */
   setTourLook(on) {
     // Drop older glasses meshes (box / mis-fitted sprite revs).
-    if (this._tourGlasses && this._glassesRev !== 4) {
+    if (this._tourGlasses && this._glassesRev !== 5) {
       this._tourGlasses.parent?.remove(this._tourGlasses);
       this._tourGlasses.traverse?.((o) => {
         o.geometry?.dispose?.();
@@ -457,17 +457,17 @@ export class MillieController {
     const out = new THREE.Vector3(mid.x, 0, mid.z);
     if (out.lengthSq() < 1e-8) out.set(0, 0, this.s0);
     out.normalize();
-    // Eye bones sit high on this chibi — drop to the visible iris / bridge.
-    mid.y -= span * 0.35;
-    mid.addScaledVector(out, 0.038);
+    // Eye bones sit a bit high — nudge down to iris, then pull clearly in front of face cards.
+    mid.y -= span * 0.18;
+    mid.addScaledVector(out, 0.062);
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), out);
     if (!this._glassesHome) this._glassesHome = { pos: mid.clone(), quat: q.clone() };
     else { this._glassesHome.pos.copy(mid); this._glassesHome.quat.copy(q); }
-    // Keep plane size matched to current eye span.
-    const planeW = span * 2.85;
+    const planeW = span * 2.95;
     const planeH = planeW * (420 / 1024);
     const geom = this._tourGlasses.geometry;
-    if (geom?.parameters && (Math.abs(geom.parameters.width - planeW) > 1e-4)) {
+    const curW = geom?.parameters?.width ?? 0;
+    if (Math.abs(curW - planeW) > 0.008) {
       geom.dispose();
       this._tourGlasses.geometry = new THREE.PlaneGeometry(planeW, planeH);
     }
@@ -479,18 +479,19 @@ export class MillieController {
     if (!head) return null;
 
     const tex = this._makeJensenGlassesTexture();
+    // depthTest off: chibi face/hair cards otherwise swallow the sprite entirely.
     const mat = new THREE.MeshBasicMaterial({
-      map: tex, transparent: true, depthTest: true, depthWrite: false,
-      side: THREE.DoubleSide, opacity: 1, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+      map: tex, transparent: true, depthTest: false, depthWrite: false,
+      side: THREE.DoubleSide, opacity: 1,
     });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.12, 0.05), mat);
     mesh.frustumCulled = false;
-    mesh.renderOrder = 30;
+    mesh.renderOrder = 999;
     mesh.name = 'MillieTourGlasses';
     mesh.visible = false;
     head.add(mesh);
 
-    this._glassesRev = 4;
+    this._glassesRev = 5;
     this._tourGlasses = mesh;
     this._glassesMat = mat;
     this._fitGlassesToEyes();
