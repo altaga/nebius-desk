@@ -2,9 +2,9 @@
   position: relative;
   z-index: 1;
   width: 100%;
-  /* Guide: smaller than tour, but tall enough to avoid vertical squash. */
-  height: min(210px, 30dvh);
-  min-height: 180px;
+  /* Guide stage — ask/bubble keep full overlay width; Millie is framed with margin via camera. */
+  height: min(240px, 34dvh);
+  min-height: 210px;
   overflow: hidden;
   background: transparent;
   /* Let the overlay drag hit-layer receive pointers. */
