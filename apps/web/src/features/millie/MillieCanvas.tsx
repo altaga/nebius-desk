@@ -107,7 +107,7 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         // Tour: fill more of the stage. Guide: a bit more air. Chrome stays above/below.
         const touring = !!host.closest("[data-tour]");
         const targetY = box.min.y + size.y * 0.52;
-        const halfH = (size.y * (touring ? 1.1 : 1.16)) / 2;
+        const halfH = (size.y * (touring ? 1.0 : 1.16)) / 2;
         const dist = halfH / Math.tan((camera.fov * Math.PI) / 360) / Math.max(camera.aspect, 0.5);
         camera.position.set(0, targetY, dist);
         camera.lookAt(0, targetY, 0);
