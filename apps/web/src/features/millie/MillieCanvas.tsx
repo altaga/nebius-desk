@@ -18,9 +18,11 @@ export type MillieHandle = {
   setTourLook: (on: boolean) => void;
 };
 
-type Props = { active: boolean; onLoadError?: (message: string) => void };
+type Props = { active: boolean; onLoadError?: (message: string) => void; onReady?: () => void; className?: string };
 
-export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanvas({ active, onLoadError }, ref) {
+export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanvas({ active, onLoadError, onReady, className }, ref) {
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
   const hostRef = useRef<HTMLDivElement>(null);
   const ctrlRef = useRef<MillieController | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -107,7 +109,8 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         // Tour: fill more of the stage. Guide: a bit more air. Chrome stays above/below.
         const touring = !!host.closest("[data-tour]");
         const targetY = box.min.y + size.y * 0.52;
-        const halfH = (size.y * (touring ? 1.0 : 1.16)) / 2;
+        const custom = Number(host.closest<HTMLElement>("[data-millie-frame]")?.dataset.millieFrame);
+        const halfH = (size.y * (custom > 0 ? custom : touring ? 1.0 : 1.16)) / 2;
         const dist = halfH / Math.tan((camera.fov * Math.PI) / 360) / Math.max(camera.aspect, 0.5);
         camera.position.set(0, targetY, dist);
         camera.lookAt(0, targetY, 0);
@@ -154,6 +157,7 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
         millie.play("idle");
         millie.react("excited", { hold: 2.8, intensity: 1, fade: 0.28 });
         millie.play("wave");
+        onReadyRef.current?.();
       } catch (err) {
         onLoadError?.(err instanceof Error ? err.message : "VRM failed to load");
         return;
@@ -196,5 +200,5 @@ export const MillieCanvas = forwardRef<MillieHandle, Props>(function MillieCanva
     };
   }, []);
 
-  return <div ref={hostRef} className={styles.canvas} aria-hidden />;
+  return <div ref={hostRef} className={className ? `${styles.canvas} ${className}` : styles.canvas} aria-hidden />;
 });

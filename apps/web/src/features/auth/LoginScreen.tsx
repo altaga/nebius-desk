@@ -1,103 +1,76 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { loginAction } from "@/app/actions/auth";
 import { RouteExplainer } from "@/features/auth/RouteExplainer";
-import { markSession } from "@/lib/api";
 import { BrandMark } from "@/ui/BrandMark";
+import { PasswordField } from "./PasswordField";
+import { useLoginForm } from "./useLoginForm";
 import styles from "./LoginScreen.module.css";
 
 type Props = {
   onAuthed: () => void;
 };
 
-type FormState = "idle" | "submitting" | "error";
-
 export function LoginScreen({ onAuthed }: Props) {
-  const [username, setUsername] = useState("admin");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [state, setState] = useState<FormState>("idle");
-
-  const canSubmit = Boolean(username.trim() && password) && state !== "submitting";
-
-  async function onSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setState("submitting");
-    setError(null);
-    try {
-      const res = await loginAction(username.trim(), password);
-      if (!res.ok) {
-        setError(res.error);
-        setState("error");
-        return;
-      }
-      markSession(true);
-      onAuthed();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
-      setState("error");
-    }
-  }
-
-  const clearError = () => state === "error" && setState("idle");
+  const form = useLoginForm(onAuthed);
 
   return (
     <main className={styles.wrap}>
-      <section className={styles.side} aria-busy={state === "submitting"}>
-        <header className={styles.brand}>
-          <BrandMark size={26} />
-          <span>
-            Nebius<b>Desk</b>
-          </span>
+      <section className={styles.side} aria-busy={form.submitting}>
+        <header className={styles.top}>
+          <a className={styles.brand} href="/" aria-label="Nebius Desk home">
+            <BrandMark size={26} />
+            <span>
+              Nebius<b>Desk</b>
+            </span>
+          </a>
+          <a className={styles.back} href="/">
+            ← Back to site
+          </a>
         </header>
 
         <div className={styles.formArea}>
-          <h1>Sign in</h1>
-          <p className={styles.sub}>Your devices, their agents, and shared memory.</p>
+          <p className={styles.kicker}>
+            <span className={styles.dot} aria-hidden />
+            Secure sign-in
+          </p>
+          <h1>Welcome back.</h1>
+          <p className={styles.sub}>Sign in to reach your Jetson, its agents, and your shared memory.</p>
 
-          <form className={styles.form} onSubmit={onSubmit} noValidate>
-            <label>
-              Username
+          <form className={styles.form} onSubmit={form.onSubmit} noValidate>
+            <div className={styles.field}>
+              <label htmlFor="login-username">Username</label>
               <input
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  clearError();
-                }}
+                id="login-username"
+                value={form.username}
+                onChange={(e) => form.setUsername(e.target.value)}
                 autoComplete="username"
-                disabled={state === "submitting"}
+                spellCheck={false}
+                disabled={form.submitting}
                 required
               />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  clearError();
-                }}
-                autoComplete="current-password"
-                autoFocus
-                disabled={state === "submitting"}
-                required
-              />
-            </label>
-            {error ? (
+            </div>
+            <PasswordField value={form.password} onChange={form.setPassword} disabled={form.submitting} />
+            {form.error ? (
               <p className={styles.error} role="alert">
-                {error}
+                {form.error}
               </p>
             ) : null}
-            <button type="submit" disabled={!canSubmit}>
-              {state === "submitting" ? "Signing in…" : "Continue"}
+            <button type="submit" className={styles.submit} disabled={!form.canSubmit}>
+              {form.submitting ? (
+                <>
+                  <span className={styles.spinner} aria-hidden />
+                  Opening your desk…
+                </>
+              ) : (
+                "Sign in"
+              )}
             </button>
           </form>
         </div>
 
-        <footer className={styles.foot}>Private desk · access is limited to enrolled operators</footer>
+        <footer className={styles.foot}>
+          Private desk · Access is limited to enrolled operators.
+        </footer>
       </section>
 
       <RouteExplainer />

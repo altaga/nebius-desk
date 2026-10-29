@@ -17,8 +17,9 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NebiusDesk",
-  description: "Agent desk for Jetson edge devices with Nebius Token Factory routing",
+  title: "Nebius Desk · Your Jetson, with a cloud brain on call",
+  description:
+    "Reach your NVIDIA Jetson from any browser or phone. Everyday AI runs on the device for free; hard reasoning goes to Nemotron on Nebius Token Factory.",
 };
 
 export const viewport: Viewport = {
