@@ -36,8 +36,8 @@ const REACT_SET = new Set<string>(SAFE_REACTIONS);
 
 /** Opening line — local UI chrome, not a Nano reply. */
 export const MILLIE_INTRO: Record<"es" | "en", string> = {
-  es: "¡Hola, soy Millie (Huang)! Me sé este desk de memoria. Pídeme que te encuentre o abra lo que sea.",
-  en: "Hey, I'm Millie (Huang)! I know this desk inside out. Ask me to find or open anything.",
+  es: "¡Hola, soy Millie! Me sé este desk de memoria. Pídeme que te encuentre o abra lo que sea.",
+  en: "Hey, I'm Millie! I know this desk inside out. Ask me to find or open anything.",
 };
 
 export const MILLIE_PLACEHOLDER: Record<"es" | "en", { ready: string; noBoard: string }> = {
