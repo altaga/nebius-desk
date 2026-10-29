@@ -15,7 +15,8 @@ router = APIRouter(prefix="/guide", tags=["guide"])
 
 
 class GuideMessageRequest(BaseModel):
-    content: str = Field(min_length=1, max_length=20_000)
+    # Matches the cloud guide route cap (apps/cloud/src/guide/routes.ts).
+    content: str = Field(min_length=1, max_length=4_000)
     session_id: str | None = None
     device_id: str | None = None
 

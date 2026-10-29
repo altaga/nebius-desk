@@ -56,6 +56,18 @@
   line-height: 1.6;
 }
 
+.link {
+  color: var(--signal);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--signal) 40%, transparent);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.link:hover {
+  text-decoration-color: var(--signal);
+}
+
 .inline {
   font-family: var(--font-mono);
   font-size: 0.86em;

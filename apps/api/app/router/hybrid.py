@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings
 from app.router import local_llm, nebius
 from app.router.budget import check_budget
-from app.router.context import cloud_context, local_context, named_system, system_prompt
+from app.router.context import cloud_context, local_context, named_system, system_prompt, wants_identity
 from app.router.pricing import canonical_model, cost_usd, model_info
 from app.router.selector import Selection, select_tier
 from app.router.tokenizer import estimate_messages_tokens
@@ -39,12 +39,13 @@ def _mode_override(settings: Settings, tier: str) -> str:
 def _local_plan(settings: Settings, system: dict, history: list[dict], user_text: str, sel: Selection,
                 note: str, model: str) -> RoutePlan:
     ctx = local_context(settings, system, history, user_text)
-    return RoutePlan("local", model, "local", _pin_identity(ctx.messages), False, ctx.original_tokens,
+    messages = _pin_identity(ctx.messages) if wants_identity(user_text) else ctx.messages
+    return RoutePlan("local", model, "local", messages, False, ctx.original_tokens,
                      False, 0, note, sel.selector, sel.reason, sel.latency_ms)
 
 
 def _pin_identity(messages: list[dict]) -> list[dict]:
-    """Repeat who is answering immediately before the question. Small models follow the latest line."""
+    """Pin the identity line right before the question — only used when the user asked who/model."""
     lead = next((m["content"].split("\n", 1)[0] for m in messages if m.get("role") == "system"), "")
     if not lead or not messages or messages[-1].get("role") != "user":
         return messages
@@ -124,7 +125,8 @@ async def plan_route(
             return _local_plan(settings, spoken, history, user_text, sel, f"{reason} Answered on the Jetson.", local_model)
         raise RoutingError(reason)
 
-    return RoutePlan("nebius", model, tier, _pin_identity(ctx.messages), thinking, ctx.original_tokens, ctx.compressed,
+    messages = _pin_identity(ctx.messages) if wants_identity(user_text) else ctx.messages
+    return RoutePlan("nebius", model, tier, messages, thinking, ctx.original_tokens, ctx.compressed,
                      ctx.compression_tokens, note, sel.selector, sel.reason, sel.latency_ms)
 
 

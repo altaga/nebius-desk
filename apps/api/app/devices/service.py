@@ -13,15 +13,17 @@ from app.devices.models import Device, DeviceMemory
 from app.edge.monitor import snapshot
 
 
-BOARD_NAME = "Millie"
+BOARD_NAME = "Kratos"
 
 
 def _repair_seed_hostname(device: Device) -> None:
-    """An early seed stored the board label in the hostname column."""
-    if (device.hostname or "").strip().lower() != "millie":
-        return
-    device.name = BOARD_NAME
-    device.hostname = socket.gethostname().strip() or BOARD_NAME
+    """Keep the USB Jetson labeled Kratos (Millie is only the waifu guide)."""
+    host = (device.hostname or "").strip().lower()
+    name = (device.name or "").strip().lower()
+    if name in {"millie", "kratos"} or host == "millie":
+        device.name = BOARD_NAME
+    if host == "millie":
+        device.hostname = socket.gethostname().strip() or BOARD_NAME
 
 
 def ensure_default_device(db: Session, user_id: int) -> Device:
@@ -110,6 +112,9 @@ def rename_board(db: Session, user_id: int, device_id: str, name: str) -> Device
     clean = name.strip()
     if not clean:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Board name is required")
+    # Millie is the guide avatar only — refuse leftover board label.
+    if clean.lower() == "millie":
+        clean = BOARD_NAME
     device.name = clean[:120]
     db.add(device)
     db.commit()

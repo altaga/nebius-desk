@@ -4,6 +4,13 @@ compatibility_date = "2026-10-01"
 compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = true
+head_sampling_rate = 1
+
 [vars]
 NEBIUS_BASE_URL = "https://api.tokenfactory.nebius.com/v1"
 # Lifetime credits on the Tavily key, shared by every account.

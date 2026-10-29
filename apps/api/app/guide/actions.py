@@ -9,9 +9,12 @@ from typing import Any
 GUIDE_ACTION_TYPES = frozenset(
     {
         "open_chat",
+        "new_chat",
         "open_machine",
         "open_terminal",
         "open_files",
+        "open_browser",
+        "open_services",
         "open_health",
         "open_panel",
         "open_board",
@@ -48,12 +51,15 @@ GUIDE_EMOTIONS = frozenset(
 
 GUIDE_TARGETS = frozenset(
     {
+        "nav.fleet",
         "nav.open_machine",
         "nav.new_chat",
         "nav.pair",
         "machine.health",
         "machine.terminal",
         "machine.files",
+        "machine.browser",
+        "machine.services",
         "panel.chat",
         "panel.board",
         "panel.plan",
@@ -62,6 +68,7 @@ GUIDE_TARGETS = frozenset(
         "board.experts",
         "board.secrets",
         "chat.model_picker",
+        "chat.composer",
     }
 )
 

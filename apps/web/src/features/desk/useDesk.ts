@@ -114,23 +114,31 @@ export function useDesk(onUnauthorized: () => void) {
   }, []);
 
   const deviceId = device?.id ?? null;
+  /** True until the first sessions fetch for this board finishes — avoids empty-chat flash on refresh. */
+  const deskHydrating = Boolean(deviceId) && sessionsReady !== deviceId;
 
   useEffect(() => {
     deviceIdRef.current = deviceId;
     setActiveBoard(deviceId);
     setTelemetry(null);
     setSessions([]);
-    setSessionId(null);
     setSessionsReady(null);
     if (!deviceId) {
+      setSessionId(null);
       setSessionsLoading(false);
       return;
     }
+    // Keep the remembered chat while sessions load — do not flash "New chat".
+    const saved = readPlace();
+    setSessionId(
+      saved.deviceId === deviceId && saved.sessionId ? saved.sessionId : null
+    );
     void reloadSessions(deviceId);
   }, [deviceId, reloadSessions]);
 
   useEffect(() => {
     if (!device || sessionsReady !== device.id) return;
+    // Never persist a null session over a remembered chat during boot races.
     writePlace({ deviceId: device.id, sessionId });
   }, [device, sessionId, sessionsReady]);
 
@@ -203,6 +211,41 @@ export function useDesk(onUnauthorized: () => void) {
     [sessions, sessionId, selectSession]
   );
 
+  /** Optimistic bulk delete; rows the board kept (running turns, failures) come back in place. */
+  const deleteSessions = useCallback(
+    async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const doomed = new Set(ids);
+      const snapshot = sessions;
+      const openRemoved = sessionId !== null && doomed.has(sessionId);
+      ids.forEach((id) => pendingDeletes.current.add(id));
+      setSessions((rows) => rows.filter((row) => !doomed.has(row.id)));
+      if (openRemoved) selectSession(null);
+      const restore = (keep: Set<string>) => {
+        keep.forEach((id) => pendingDeletes.current.delete(id));
+        setSessions((rows) => {
+          const present = new Set(rows.map((r) => r.id));
+          return snapshot.filter((r) => present.has(r.id) || keep.has(r.id));
+        });
+        if (openRemoved && sessionId && keep.has(sessionId)) selectSession(sessionId);
+      };
+      try {
+        // Ids the board didn't delete and didn't skip were already gone — leave them out.
+        const { skipped_running } = await api().deleteSessions(ids);
+        if (skipped_running.length) {
+          restore(new Set(skipped_running));
+          const n = skipped_running.length;
+          setSessionsError(n === 1 ? "1 chat is still running and was kept." : `${n} chats are still running and were kept.`);
+        }
+      } catch (err) {
+        restore(doomed);
+        setSessionsError(message(err, "Could not delete these chats"));
+        throw err;
+      }
+    },
+    [sessions, sessionId, selectSession]
+  );
+
   const [memoryVersion, setMemoryVersion] = useState(0);
 
   const renameBoard = useCallback(async (id: string, name: string) => {
@@ -247,9 +290,14 @@ export function useDesk(onUnauthorized: () => void) {
     setActiveBoard(next?.id ?? null);
     setTelemetry(null);
     setSessions([]);
-    setSessionId(null);
     setSessionsReady(null);
     setSessionsError(null);
+    if (!next) {
+      setSessionId(null);
+    } else {
+      const saved = readPlace();
+      setSessionId(saved.deviceId === next.id && saved.sessionId ? saved.sessionId : null);
+    }
     setDevice(next);
   }, []);
 
@@ -272,6 +320,7 @@ export function useDesk(onUnauthorized: () => void) {
     sessionsLoading,
     sessionsError,
     sessionId,
+    deskHydrating,
     telemetry,
     setTelemetry,
     selectSession,
@@ -280,6 +329,7 @@ export function useDesk(onUnauthorized: () => void) {
     renameSession,
     pinSession,
     deleteSession,
+    deleteSessions,
     renameBoard,
     removeBoard,
     saveMemory,

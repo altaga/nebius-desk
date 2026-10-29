@@ -1,11 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import type { ModelChoice } from "@nebius-desk/shared/index";
+import { MAX_CHAT_INPUT_CHARS, type ModelChoice } from "@nebius-desk/shared/index";
 import { IconArrowUp, IconMic, IconPlus } from "@/ui/icons";
 import { ModelPicker } from "@/features/chat/ModelPicker";
 import { useDictation } from "@/features/chat/useDictation";
+import { useDeskGuideOptional } from "@/features/millie/DeskGuideContext";
 import styles from "./Composer.module.css";
+
+const FAST_WINDOW_MS = 420;
+const FAST_KEYS = 9;
+const LONG_PASTE_CHARS = 240;
+/** Show the counter once a draft gets close to the cap. */
+const COUNTER_FROM = Math.floor(MAX_CHAT_INPUT_CHARS * 0.8);
 
 type Command = { name: string; hint: string };
 
@@ -49,7 +56,21 @@ export function Composer({
   const [notice, setNotice] = useState<string | null>(null);
   const [active, setActive] = useState(0);
   const ta = useRef<HTMLTextAreaElement>(null);
+  const deskGuide = useDeskGuideOptional();
+  const keyTimes = useRef<number[]>([]);
   const dictation = useDictation((text) => setValue((v) => (v ? `${v} ${text}` : text)));
+
+  function noteTyped(added: number) {
+    if (added <= 0 || added > 4) return; // ignore bulk replaces; paste handled separately
+    const now = performance.now();
+    const times = keyTimes.current;
+    times.push(now);
+    while (times.length && now - times[0] > FAST_WINDOW_MS) times.shift();
+    if (times.length >= FAST_KEYS) {
+      times.length = 0;
+      deskGuide?.notifyComposerCue({ kind: "fast_type" });
+    }
+  }
 
   const matches = useMemo(() => {
     if (!value.startsWith("/") || value.includes(" ")) return [];
@@ -79,6 +100,9 @@ export function Composer({
 
   useEffect(() => setActive(0), [matches.length]);
 
+  const length = value.trim().length;
+  const tooLong = length > MAX_CHAT_INPUT_CHARS;
+
   function flash(text: string) {
     setNotice(text);
     window.setTimeout(() => setNotice(null), 1800);
@@ -87,6 +111,9 @@ export function Composer({
   async function submit(raw = value) {
     const text = raw.trim();
     if (!text || sending) return;
+    if (text.length > MAX_CHAT_INPUT_CHARS) {
+      return flash(`Too long — ${MAX_CHAT_INPUT_CHARS.toLocaleString()} characters max. Upload big text as a file.`);
+    }
     if (text === "/new") {
       setValue("");
       onNewChat();
@@ -151,6 +178,7 @@ export function Composer({
 
       <form
         className={styles.box}
+        data-guide="chat.composer"
         onSubmit={(e) => {
           e.preventDefault();
           void submit();
@@ -162,7 +190,18 @@ export function Composer({
           rows={1}
           placeholder="Message the agent — / for commands"
           aria-label="Message"
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => {
+            const next = e.target.value;
+            const delta = next.length - value.length;
+            setValue(next);
+            noteTyped(delta);
+          }}
+          onPaste={(e) => {
+            const text = e.clipboardData?.getData("text") || "";
+            if (text.length >= LONG_PASTE_CHARS) {
+              deskGuide?.notifyComposerCue({ kind: "long_paste", chars: text.length });
+            }
+          }}
           onKeyDown={onKeyDown}
         />
         <div className={styles.tools}>
@@ -205,6 +244,11 @@ export function Composer({
 
         <ModelPicker value={choice} onChange={onChoice} deviceName={deviceName} cloudOnly={cloudOnly} />
         <span className={styles.spacer} />
+        {length >= COUNTER_FROM ? (
+          <span className={styles.counter} data-over={tooLong} aria-live="polite">
+            {length.toLocaleString()} / {MAX_CHAT_INPUT_CHARS.toLocaleString()}
+          </span>
+        ) : null}
         <span className={styles.model} title={modelId || undefined}>
           <i className={styles.status} data-busy={sending} aria-hidden />
           {modelLabel}
@@ -226,7 +270,12 @@ export function Composer({
             <span className={styles.stopIcon} aria-hidden />
           </button>
         ) : (
-          <button type="submit" className={styles.send} disabled={!value.trim()} aria-label="Send">
+          <button
+            type="submit"
+            className={styles.send}
+            disabled={!value.trim() || tooLong}
+            aria-label={tooLong ? "Message is too long to send" : "Send"}
+          >
             <IconArrowUp size={15} />
           </button>
         )}
@@ -234,7 +283,10 @@ export function Composer({
       </form>
 
       <p className={styles.hint} aria-live="polite">
-        {notice ?? "Enter to send · /memory saves a fact · /expert Name calls a profile"}
+        {notice ??
+          (tooLong
+            ? `Too long — trim to ${MAX_CHAT_INPUT_CHARS.toLocaleString()} characters or upload it as a file`
+            : "Enter to send · /memory saves a fact · /expert Name calls a profile")}
       </p>
     </div>
   );

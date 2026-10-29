@@ -14,7 +14,7 @@ const SECTIONS: Array<{ id: BoardSection; label: string; detail: string }> = [
   { id: "status", label: "Status", detail: "Who the board is and whether it is reporting." },
   { id: "memory", label: "Memory", detail: "Markdown files every chat on this board can read." },
   { id: "experts", label: "Experts", detail: "Profiles called with @Name." },
-  { id: "secrets", label: "Secrets", detail: "Names injected into the CLI and the terminal." },
+  { id: "secrets", label: "Secrets", detail: "Board keychain: usable as env vars in CLI, terminal, and chat runs — values never leave the board." },
 ];
 
 type Counts = { memory: number | null; experts: number | null; secrets: number | null };

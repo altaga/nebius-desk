@@ -24,8 +24,14 @@ export type FromAgent =
 /** What the browser sends on a terminal socket. */
 export type FromTerminal = { type: "input"; data: string } | { type: "resize"; cols: number; rows: number };
 
-export const MAX_REQUEST_BODY = 768 * 1024;
+/** JSON+base64 desk uploads (~1.5 MB file → ~2.1 MB body). Keep under DO practical limits. */
+export const MAX_REQUEST_BODY = 3 * 1024 * 1024;
 /** First byte from the board (headers). LLM turns need headroom over a flaky link. */
 export const RESPONSE_START_TIMEOUT_MS = 90_000;
 
-export const FORWARD_REQUEST_HEADERS = ["content-type", "accept"];
+export const FORWARD_REQUEST_HEADERS = [
+  "content-type",
+  "accept",
+  "referer",
+  "x-desk-preview-base",
+];

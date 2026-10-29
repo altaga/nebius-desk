@@ -3,6 +3,9 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+# Keep in sync with MAX_CHAT_INPUT_CHARS in apps/web/src/shared/index.ts.
+MAX_CHAT_INPUT_CHARS = 8_000
+
 
 class CreateSessionRequest(BaseModel):
     title: str = Field(default="New chat", max_length=200)
@@ -19,6 +22,13 @@ class PinSessionRequest(BaseModel):
     pinned: bool
 
 
+MAX_BULK_DELETE = 200
+
+
+class BulkDeleteSessionsRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=MAX_BULK_DELETE)
+
+
 class SessionOut(BaseModel):
     id: str
     title: str
@@ -32,10 +42,14 @@ class SessionOut(BaseModel):
 
 
 class SendMessageRequest(BaseModel):
-    content: str = Field(min_length=1, max_length=100_000)
+    content: str = Field(min_length=1, max_length=MAX_CHAT_INPUT_CHARS)
     session_id: str | None = None
     device_id: str | None = None
     model: Literal["auto", "local", "nano", "fast", "heavy", "ultra"] = "auto"
+
+
+class ResolveApprovalRequest(BaseModel):
+    decision: Literal["approve", "deny"]
 
 
 class MessageOut(BaseModel):

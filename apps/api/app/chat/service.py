@@ -7,7 +7,6 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.chat.models import ChatMessage, ChatSession
-from app.telemetry.models import TokenLedger
 
 
 def create_session(
@@ -80,12 +79,29 @@ def set_pinned(db: Session, user_id: int, session_id: str, pinned: bool) -> Chat
     return session
 
 
+# Deleting chats never touches TokenLedger: budget and subscription spend are summed from it,
+# so usage must outlive the conversation.
 def delete_session(db: Session, user_id: int, session_id: str) -> None:
     session = get_session(db, user_id, session_id)
     db.query(ChatMessage).filter(ChatMessage.session_id == session.id).delete()
-    db.query(TokenLedger).filter(TokenLedger.session_id == session.id, TokenLedger.user_id == user_id).delete()
     db.delete(session)
     db.commit()
+
+
+def delete_sessions(db: Session, user_id: int, session_ids: list[str]) -> list[str]:
+    """Delete the caller's sessions among `session_ids` in one transaction. Returns the ids deleted."""
+    ids = [
+        row.id
+        for row in db.query(ChatSession.id).filter(
+            ChatSession.user_id == user_id, ChatSession.id.in_(set(session_ids))
+        )
+    ]
+    if not ids:
+        return []
+    db.query(ChatMessage).filter(ChatMessage.session_id.in_(ids)).delete(synchronize_session=False)
+    db.query(ChatSession).filter(ChatSession.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    return ids
 
 
 def list_messages(db: Session, session_id: str) -> list[ChatMessage]:

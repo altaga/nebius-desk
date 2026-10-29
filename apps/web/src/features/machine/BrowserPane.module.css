@@ -1,0 +1,208 @@
+.pane {
+  display: grid;
+  grid-template-rows: auto auto minmax(160px, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  height: 100%;
+}
+
+.pane[data-variant="dock"] {
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.pane[data-variant="dock"] .stage {
+  min-height: 180px;
+}
+
+.pane[data-variant="dock"] .actions button {
+  padding: 4px 8px;
+  font-size: 11.5px;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--ink-3);
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.orient {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+
+.orient button {
+  border: 0;
+  border-radius: 0;
+  border-right: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--ink-3);
+}
+
+.orient button:last-child {
+  border-right: 0;
+}
+
+.orient button[data-on="true"] {
+  background: var(--active);
+  color: var(--ink);
+}
+
+.actions button {
+  border: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--ink-2);
+  border-radius: var(--r-sm);
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.stage {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  padding: 10px;
+}
+
+.frame {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  display: grid;
+  place-items: stretch;
+  background: #0b0d10;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.frame[data-orientation="portrait"] {
+  width: min(100%, 390px);
+  height: min(100%, 720px);
+  min-height: 420px;
+  aspect-ratio: 9 / 19.5;
+  justify-self: center;
+  border-radius: 18px;
+}
+
+.frame[data-orientation="landscape"] {
+  width: 100%;
+  height: 100%;
+  min-height: 220px;
+  aspect-ratio: auto;
+}
+
+.live {
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  border: 0;
+  background: #fff;
+}
+
+/* No object-fit: the img box must equal the frame so click fractions map 1:1 to the board viewport. */
+.shot {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+  justify-self: center;
+  align-self: center;
+  user-select: none;
+}
+
+.frame[data-interactive="true"] {
+  outline: none;
+}
+
+.frame[data-interactive="true"] .shot {
+  cursor: pointer;
+}
+
+.frame[data-interactive="true"]:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--signal);
+}
+
+.frame[data-sending="true"] .shot {
+  opacity: 0.85;
+  transition: opacity 120ms ease;
+}
+
+.empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--ink-3);
+  font-size: 13px;
+  text-align: center;
+  align-self: center;
+  justify-self: center;
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  gap: 6px;
+  overflow: auto hidden;
+}
+
+.list button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  border-radius: var(--r-sm);
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.list button[data-on="true"] {
+  border-color: var(--line-strong);
+  color: var(--ink);
+  background: var(--raised);
+}

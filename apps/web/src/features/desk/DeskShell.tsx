@@ -18,6 +18,7 @@ import {
 import { GuideSpotlight } from "@/features/millie/GuideSpotlight";
 import { MillieErrorBoundary } from "@/features/millie/MillieErrorBoundary";
 import { TelemetryPanel } from "@/features/panel/TelemetryPanel";
+import { readPanelOpenCookie, writePanelOpenCookie } from "@/features/desk/panelCookie";
 import styles from "./DeskShell.module.css";
 
 const MillieOverlay = dynamic(
@@ -29,8 +30,10 @@ const COMPACT = "(max-width: 1080px)";
 
 export function DeskShell({ onLogout }: { onLogout: () => void }) {
   const desk = useDesk(onLogout);
+  // Fleet/chats nav: open by default on refresh — never persisted.
   const [navOpen, setNavOpen] = useState(true);
-  const [panelOpen, setPanelOpen] = useState(true);
+  // Right telemetry panel: closed by default; cookie remembers last choice.
+  const [panelOpen, setPanelOpenState] = useState(false);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<DeskView>("chat");
   const [machineTab, setMachineTab] = useState<MachineTab>("health");
@@ -39,11 +42,23 @@ export function DeskShell({ onLogout }: { onLogout: () => void }) {
   const [draft, setDraft] = useState<{ text: string; nonce: number } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
+  const setPanelOpen = useCallback((open: boolean | ((prev: boolean) => boolean)) => {
+    setPanelOpenState((prev) => {
+      const next = typeof open === "function" ? open(prev) : open;
+      writePanelOpenCookie(next);
+      return next;
+    });
+  }, []);
+
   useEffect(() => {
-    if (window.matchMedia(COMPACT).matches) {
+    const compact = window.matchMedia(COMPACT).matches;
+    if (compact) {
       setNavOpen(false);
-      setPanelOpen(false);
+      setPanelOpenState(false);
+      return;
     }
+    // Desktop: nav stays open (no cookie). Restore right panel from cookie only.
+    setPanelOpenState(readPanelOpenCookie());
   }, []);
 
   const showChat = useCallback(() => {
@@ -81,6 +96,13 @@ export function DeskShell({ onLogout }: { onLogout: () => void }) {
       setBoardSection={setBoardSection}
       setNavOpen={setNavOpen}
       setPanelOpen={setPanelOpen}
+      selectBoardByName={(name) => {
+        const hit = desk.devices.find((d) => d.name.toLowerCase() === name.trim().toLowerCase());
+        if (!hit) return false;
+        desk.setDevice(hit);
+        return true;
+      }}
+      startNewChat={newChat}
     >
       <div className={styles.shell} data-nav={navOpen} data-panel={panelOpen}>
         {navOpen ? (
@@ -107,6 +129,7 @@ export function DeskShell({ onLogout }: { onLogout: () => void }) {
               onRemoveBoard={desk.removeBoard}
               onPinSession={desk.pinSession}
               onDeleteSession={desk.deleteSession}
+              onDeleteSessions={desk.deleteSessions}
               onNewChat={newChat}
               onOpenMachine={() => {
                 setView((current) => (current === "machine" ? "chat" : "machine"));
@@ -122,7 +145,13 @@ export function DeskShell({ onLogout }: { onLogout: () => void }) {
         <main className={styles.main}>
           <TopBar
             deviceName={desk.device?.name ?? null}
-            title={view === "machine" ? "Machine" : (active?.title ?? null)}
+            title={
+              view === "machine"
+                ? "Machine"
+                : desk.deskHydrating && !active
+                  ? "…"
+                  : (active?.title ?? null)
+            }
             navOpen={navOpen}
             panelOpen={panelOpen}
             onToggleNav={() => setNavOpen((v) => !v)}
@@ -147,6 +176,8 @@ export function DeskShell({ onLogout }: { onLogout: () => void }) {
               deviceName={desk.device.name}
               cloudOnly={Boolean(desk.device.board_emu)}
               sessionId={desk.sessionId}
+              sessionStatus={active?.status ?? null}
+              hydrating={desk.deskHydrating}
               onSession={desk.onSessionCreated}
               onTelemetry={desk.setTelemetry}
               onNewChat={newChat}

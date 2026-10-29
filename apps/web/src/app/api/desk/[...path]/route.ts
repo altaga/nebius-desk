@@ -26,13 +26,36 @@ function seal(status: number, body: BodyInit | null, headers: Headers, issued: I
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Chat SSE closes at approval; keep headroom for model+tools before that.
+// Pro/Enterprise can raise further — Hobby caps at 300.
 export const maxDuration = 300;
+
+function deskPreviewBase(path: string[]): string | null {
+  // v1/devices/:id/api/edge/preview/:port[/…]
+  if (
+    path.length >= 6 &&
+    path[0] === "v1" &&
+    path[1] === "devices" &&
+    path[3] === "api" &&
+    path[4] === "edge" &&
+    path[5] === "preview" &&
+    path[6] &&
+    /^\d+$/.test(path[6])
+  ) {
+    return `/api/desk/v1/devices/${path[2]}/api/edge/preview/${path[6]}/`;
+  }
+  return null;
+}
 
 async function proxy(req: NextRequest, path: string[]) {
   const target = `${getDeskApiUrl()}/${path.join("/")}${req.nextUrl.search}`;
   const headers = new Headers();
   const contentType = req.headers.get("content-type");
   if (contentType) headers.set("content-type", contentType);
+  const referer = req.headers.get("referer");
+  if (referer) headers.set("referer", referer);
+  const previewBase = deskPreviewBase(path);
+  if (previewBase) headers.set("x-desk-preview-base", previewBase);
 
   const token = await getAuthToken();
   if (token) headers.set("authorization", `Bearer ${token}`);
@@ -65,6 +88,13 @@ async function proxy(req: NextRequest, path: string[]) {
         "cache-control": "no-cache, no-transform",
         "x-accel-buffering": "no",
       }), issued);
+    }
+    // Demo videos can be tens of MB — pipe media through instead of buffering it.
+    if (upstream.body && /^(video|audio)\/|^application\/pdf/.test(ct)) {
+      const media = new Headers({ "content-type": ct, "cache-control": "private, max-age=60" });
+      const length = upstream.headers.get("content-length");
+      if (length) media.set("content-length", length);
+      return seal(upstream.status, upstream.body, media, issued);
     }
     const outHeaders = new Headers();
     if (ct) outHeaders.set("content-type", ct);

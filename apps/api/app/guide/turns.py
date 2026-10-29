@@ -120,12 +120,14 @@ async def stream_guide_turn(
 
         display, actions = parse_guide_reply(result.reply)
         # Never fall back to raw reply — that leaks ```guide JSON into the bubble.
+        # Persist the full model reply (with fence) so later turns still emit tools.
         meta = result_to_dict(result)
         meta["guide_actions"] = actions
+        meta["display"] = display
         assistant = ChatMessage(
             session_id=session.id,
             role="assistant",
-            content=display,
+            content=result.reply,
             meta_json=json.dumps(meta),
         )
         session.status = "idle"

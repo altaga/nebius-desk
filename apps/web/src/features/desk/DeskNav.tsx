@@ -1,12 +1,12 @@
 "use client";
 
-import type { RefObject } from "react";
+import { useCallback, useEffect, useState, type RefObject } from "react";
 import { ChatList } from "@/features/desk/ChatList";
 import { FleetList } from "@/features/desk/FleetList";
 import { PairBoard } from "@/features/desk/PairBoard";
 import type { DeviceRow, SessionRow } from "@/features/desk/types";
 import { BrandMark } from "@/ui/BrandMark";
-import { IconLogout, IconMonitor, IconPlus, IconSearch, IconSidebar } from "@/ui/icons";
+import { IconListCheck, IconLogout, IconMonitor, IconPlus, IconSearch, IconSidebar } from "@/ui/icons";
 import styles from "./DeskNav.module.css";
 
 type Props = {
@@ -28,6 +28,7 @@ type Props = {
   onRemoveBoard: (id: string) => Promise<void>;
   onPinSession: (id: string, pinned: boolean) => Promise<void>;
   onDeleteSession: (id: string) => Promise<void>;
+  onDeleteSessions: (ids: string[]) => Promise<void>;
   onNewChat: () => void;
   onOpenMachine: () => void;
   machineOpen: boolean;
@@ -37,6 +38,16 @@ type Props = {
 };
 
 export function DeskNav(p: Props) {
+  const [selecting, setSelecting] = useState(false);
+  const stopSelecting = useCallback(() => setSelecting(false), []);
+  const canSelect = Boolean(p.device) && p.sessions.length > 0;
+  const deviceId = p.device?.id;
+
+  useEffect(() => setSelecting(false), [deviceId]);
+  useEffect(() => {
+    if (!canSelect) setSelecting(false);
+  }, [canSelect]);
+
   return (
     <nav className={styles.nav} aria-label="Workspace">
       <header className={styles.brand}>
@@ -53,7 +64,7 @@ export function DeskNav(p: Props) {
         <h2 id="fleet-label" className={styles.label}>
           Fleet
         </h2>
-        <div className={styles.fleetScroll}>
+        <div className={styles.fleetScroll} data-guide="nav.fleet">
           <FleetList
             devices={p.devices}
             loading={p.devicesLoading}
@@ -97,9 +108,27 @@ export function DeskNav(p: Props) {
       </section>
 
       <section className={styles.chatsPane} aria-labelledby="chats-label">
-        <h2 id="chats-label" className={styles.label}>
-          Chats
-        </h2>
+        <div className={styles.labelRow}>
+          <h2 id="chats-label" className={styles.label}>
+            Chats
+          </h2>
+          {selecting ? (
+            <button type="button" className={styles.labelDone} onClick={stopSelecting}>
+              Done
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.labelBtn}
+              onClick={() => setSelecting(true)}
+              disabled={!canSelect}
+              aria-label="Select chats"
+              title="Select chats"
+            >
+              <IconListCheck size={14} />
+            </button>
+          )}
+        </div>
         <label className={styles.search}>
           <IconSearch size={15} />
           <input
@@ -126,6 +155,9 @@ export function DeskNav(p: Props) {
               onRename={p.onRenameSession}
               onPin={p.onPinSession}
               onDelete={p.onDeleteSession}
+              onDeleteMany={p.onDeleteSessions}
+              selecting={selecting}
+              onSelectingDone={stopSelecting}
             />
           ) : (
             <p className={styles.hint}>Select a machine in the fleet.</p>

@@ -7,25 +7,30 @@ from sqlalchemy.orm import Session
 from app.auth.deps import get_current_user
 from app.auth.models import User
 from app.chat.models import ChatSession
+from app.chat.approval import get_pending, pending_for_session, resolve as resolve_approval
 from app.chat.schemas import (
+    BulkDeleteSessionsRequest,
     ChatTurnResponse,
     CreateSessionRequest,
     MessageOut,
     PinSessionRequest,
     RenameSessionRequest,
+    ResolveApprovalRequest,
     SendMessageRequest,
     SessionOut,
 )
 from app.chat.service import (
     create_session,
     delete_session,
+    delete_sessions,
     get_session,
     list_messages,
     list_sessions,
     rename_session,
     set_pinned,
 )
-from app.chat.turns import complete_turn, stream_turn
+from app.chat.detached import iter_detached_turn, session_turn_active
+from app.chat.turns import complete_turn
 from app.db import get_db
 from app.devices.service import get_device
 from app.router.hybrid import RoutingError
@@ -103,6 +108,18 @@ def api_delete_session(
     return {"ok": True}
 
 
+@router.post("/sessions/bulk-delete")
+def api_bulk_delete_sessions(
+    body: BulkDeleteSessionsRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    # A running turn would keep writing into a deleted session — leave those for later.
+    busy = [sid for sid in body.ids if session_turn_active(sid)]
+    deleted = delete_sessions(db, user.id, [sid for sid in body.ids if sid not in busy])
+    return {"ok": True, "deleted": deleted, "skipped_running": busy}
+
+
 @router.get("/sessions/{session_id}/messages", response_model=list[MessageOut])
 def api_list_messages(
     session_id: str,
@@ -136,12 +153,20 @@ async def api_stream_message(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Server-sent events: start → delta* → done | error."""
+    """Server-sent events: start → delta* → [approval] → tool* → done | error.
+
+    The turn keeps running on the board if the browser closes mid-command; reopen
+    the chat to load the finished assistant message.
+    """
     device_id = _local_device_id(db, user, body.device_id)
 
     async def events():
-        async for event in stream_turn(
-            user.id, content=body.content, session_id=body.session_id, device_id=device_id, choice=body.model
+        async for event in iter_detached_turn(
+            user.id,
+            content=body.content,
+            session_id=body.session_id,
+            device_id=device_id,
+            choice=body.model,
         ):
             yield f"data: {json.dumps(event)}\n\n"
 
@@ -150,6 +175,49 @@ async def api_stream_message(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/sessions/{session_id}/status")
+def api_session_status(
+    session_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Cheap poll target after refresh — is the board still working this chat?"""
+    session = get_session(db, user.id, session_id)
+    pending = pending_for_session(session.id, user.id)
+    out: dict = {
+        "session_id": session.id,
+        "status": session.status,
+        "turn_active": session_turn_active(session.id) or session.status == "running",
+        "updated_at": session.updated_at.isoformat() if session.updated_at else None,
+        "pending_approval": None,
+    }
+    if pending is not None:
+        out["pending_approval"] = {
+            "approval_id": pending.id,
+            "actions": pending.actions,
+            "timeout_sec": 300,
+        }
+    return out
+
+
+@router.post("/approvals/{approval_id}")
+def api_resolve_approval(
+    approval_id: str,
+    body: ResolveApprovalRequest,
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Approve or deny a pending sensitive board action (unblocks the open SSE turn)."""
+    if get_pending(approval_id) is None:
+        raise HTTPException(status_code=404, detail="Approval not found or expired")
+    try:
+        item = resolve_approval(approval_id, user.id, body.decision)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "approval_id": item.id, "decision": item.decision}
 
 
 @router.post("/message", response_model=ChatTurnResponse)

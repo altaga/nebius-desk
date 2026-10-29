@@ -1,5 +1,5 @@
 import { randomToken, sha256Hex } from "../crypto";
-import { DeviceView, deviceView } from "../devices/service";
+import { DeviceView, canonicalBoardName, deviceView } from "../devices/service";
 import { Env, nowSec } from "../env";
 import { HttpError } from "../http";
 
@@ -17,8 +17,9 @@ export async function startPairing(env: Env, name: string, hostname: string) {
   await env.DB.prepare("DELETE FROM pair_codes WHERE expires_at < ?1").bind(nowSec()).run();
   const code = newCode();
   const pollToken = randomToken();
+  const board = canonicalBoardName(name, hostname);
   await env.DB.prepare("INSERT INTO pair_codes (code, poll_hash, name, hostname, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)")
-    .bind(code, await sha256Hex(pollToken), name, hostname, nowSec() + CODE_TTL_SEC)
+    .bind(code, await sha256Hex(pollToken), board, hostname, nowSec() + CODE_TTL_SEC)
     .run();
   return { code, poll_token: pollToken, expires_in: CODE_TTL_SEC };
 }
@@ -31,11 +32,12 @@ export async function claimCode(env: Env, userId: number, code: string): Promise
   if (!row || row.expires_at < nowSec() || row.device_id) throw new HttpError(404, "pair_code_invalid");
   const id = crypto.randomUUID();
   const created = nowSec();
+  const board = canonicalBoardName(row.name, row.hostname);
   await env.DB.batch([
     env.DB.prepare("INSERT INTO devices (id, user_id, name, hostname, created_at) VALUES (?1, ?2, ?3, ?4, ?5)").bind(
       id,
       userId,
-      row.name,
+      board,
       row.hostname,
       created
     ),
@@ -44,7 +46,7 @@ export async function claimCode(env: Env, userId: number, code: string): Promise
   return deviceView({
     id,
     user_id: userId,
-    name: row.name,
+    name: board,
     hostname: row.hostname,
     remote_enabled: 1,
     connected_at: null,

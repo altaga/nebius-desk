@@ -148,8 +148,16 @@ def snapshot() -> dict:
         model = _model()
         if emu and not model:
             model = "Docker cloud board"
+        from app.edge.identity import host_identity
+
+        ident = host_identity()
         return {
-            "host": platform.node(),
+            "host": ident["hostname"],
+            "hostname": ident["hostname"],
+            "os_user": ident["os_user"],
+            "home": ident["home"],
+            "desk_root": ident["desk_root"],
+            "desk_root_is_home": ident["desk_root_is_home"],
             "model": model,
             "platform": platform.platform(),
             "jetson_online": (not emu)

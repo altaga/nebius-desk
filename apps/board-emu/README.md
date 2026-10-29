@@ -1,8 +1,8 @@
 # board-emu — Docker cloud board for Nebius Desk
 
-A **Linux container** that pairs like a real board: Terminal, Files, and Health are
-real (the container). Chat uses **Nano / Lightning / Super** via the Nebius gateway
-(**spends user credits**).
+A **Linux container** that pairs like a real board: Terminal, Files, Health,
+Jobs, Services, and Browser are real (the container). Chat uses
+**Nano / Lightning / Super** via the Nebius gateway (**spends user credits**).
 
 Not a Jetson: no CUDA, no Ollama, no Auto/Local models. Think “VM enrolled in Desk”
 without on-device inference.
@@ -13,15 +13,19 @@ without on-device inference.
 cd apps/board-emu
 copy .env.example .env
 docker compose build
+docker compose up -d natasha
+```
 
-docker compose run --rm natasha pair   # paste CODE into Pair a board
-docker compose run --rm nova pair
-docker compose run --rm orin pair
+Then open Desk at `http://localhost:3000/pair` (must be localhost HTTP so the browser can reach the container). Host ports: Natasha `18001`, Nova `18002`, Orin `18003`.
 
+CLI pair still works if you want the old paste-code path:
+
+```powershell
+docker compose run --rm natasha pair
 docker compose up -d
 ```
 
-Board display names: **Natasha**, **Nova**, **Orin** — never Millie (reserved for the real Jetson).
+Board display names: **Natasha**, **Nova**, **Orin** — never **Kratos** (the USB Jetson) and never **Millie** (waifu guide only).
 
 ## What works
 
@@ -33,7 +37,11 @@ Board display names: **Natasha**, **Nova**, **Orin** — never Millie (reserved 
 | Terminal | Real bash inside the container (`jetson@…`) |
 | Files | Real FS under `/home/jetson` |
 | Health | Real CPU / RAM / disk / uptime (GPU/temp only if the host exposes them) |
+| Jobs / probe / deploy / checks | Real job runner inside the container |
+| Browser / record / Live preview | Playwright Chromium baked into the image |
+| Services / preview | Listeners via `/proc` (no Docker-in-Docker) |
 | HTTP CLI (`/edge/cli`) | Real shell in the desk file root |
+| Safe install (curl/git) | Available; Node via nvm at runtime if approved |
 
 Data lives on the host (bind mounts), default:
 

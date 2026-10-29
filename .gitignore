@@ -1,5 +1,5 @@
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -8,29 +8,29 @@ lerna-debug.log*
 .pnpm-debug.log*
 
 # Runtime
-pids
+pids/
 *.pid
 *.seed
 *.pid.lock
 
 # Coverage / caches
-coverage
+coverage/
 *.lcov
-.nyc_output
-.cache
-.parcel-cache
+.nyc_output/
+.cache/
+.parcel-cache/
 .eslintcache
 .stylelintcache
 *.tsbuildinfo
-.npm
+.npm/
 
 # Dependencies
 node_modules/
 jspm_packages/
 web_modules/
 .pnp.*
-.yarn/cache
-.yarn/unplugged
+.yarn/cache/
+.yarn/unplugged/
 .yarn/build-state.yml
 .yarn/install-state.gz
 
@@ -42,16 +42,22 @@ web_modules/
 secrets.env
 **/secrets.env
 !secrets.env.example
-# Board login for Millie lives here; do not commit it.
-Skills/ssh-millie-jetson/
 .cf/
 **/.cf/
 
+# Local-only operator tooling. Never committed.
+Skills/
+scripts/
+
+# Scratch files from agent runs. Never committed.
+_tmp*
+_tmp_*/
+
 # Next.js
-.next
-out
-dist
-build
+.next/
+out/
+dist/
+build/
 
 # Expo / React Native
 .expo/
@@ -97,12 +103,12 @@ Thumbs.db
 .dynamodb/
 .serverless/
 .docusaurus/
-**/.vitepress/dist
-**/.vitepress/cache
-.vuepress/dist
-.nuxt
-lib-cov
-.grunt
+**/.vitepress/dist/
+**/.vitepress/cache/
+.vuepress/dist/
+.nuxt/
+lib-cov/
+.grunt/
 bower_components/
 .rpt2_cache/
 .rts2_cache_cjs/
@@ -112,7 +118,4 @@ bower_components/
 *.tgz
 .yarn-integrity
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
-.vercel
-
-# Local unpack of Millie demo zip (assets are copied into apps/web)
-utils/chibi_v2.2/_extract/
+.vercel/

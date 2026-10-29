@@ -1,1 +1,1 @@
-"""NebiusDesk API — runs on Jetson (or local mock)."""
+"""Nebius Desk API — runs on Jetson (or local mock)."""

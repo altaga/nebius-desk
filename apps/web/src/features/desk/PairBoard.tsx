@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { api } from "@/lib/api";
+import { IconChip } from "@/ui/icons";
 import styles from "./DeskNav.module.css";
 
 export function PairBoard({ onPaired }: { onPaired: () => void }) {
@@ -34,9 +36,11 @@ export function PairBoard({ onPaired }: { onPaired: () => void }) {
         void submit();
       }}
     >
-      <label className={styles.pairLabel} htmlFor="pair-code">
-        Pair a board
-      </label>
+      <p className={styles.pairLabel}>Pair new board?</p>
+      <Link className={styles.pairSetup} href="/pair">
+        <IconChip size={15} />
+        Set up a board
+      </Link>
       <div className={styles.pairRow}>
         <input
           id="pair-code"

@@ -36,25 +36,35 @@ export function useTurnBuffer(setMessages: Dispatch<SetStateAction<UiMessage[]>>
 
     return {
       start(event: Start) {
-        text.current = "";
-        thinking.current = "";
-        setMessages((list) => [
-          ...list,
-          {
-            role: "assistant",
-            content: "",
-            pending: true,
-            meta: {
-              route: event.route,
-              model: event.model,
-              intent: event.intent,
-              budget_note: event.note,
-              selector: event.selector,
-              selector_reason: event.selector_reason,
-              selector_ms: event.selector_ms,
+        const meta = {
+          route: event.route,
+          model: event.model,
+          intent: event.intent,
+          budget_note: event.note,
+          selector: event.selector,
+          selector_reason: event.selector_reason,
+          selector_ms: event.selector_ms,
+        };
+        setMessages((list) => {
+          const last = list[list.length - 1];
+          // Second start in the same turn (routing → real route): patch the pending bubble.
+          if (last?.pending && last.role === "assistant") {
+            const next = list.slice();
+            next[next.length - 1] = { ...last, meta: { ...last.meta, ...meta } };
+            return next;
+          }
+          text.current = "";
+          thinking.current = "";
+          return [
+            ...list,
+            {
+              role: "assistant",
+              content: "",
+              pending: true,
+              meta,
             },
-          },
-        ]);
+          ];
+        });
       },
       push(kind: "text" | "thinking", chunk: string) {
         if (kind === "thinking") thinking.current += chunk;

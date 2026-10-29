@@ -39,12 +39,14 @@ export function middleware(req: NextRequest) {
 
   // No custom domain yet: the public host serves the introduction and the desk.
   if (local || !site) {
-    if (pathname === "/" || pathname === "/login" || pathname === "/dashboard") return NextResponse.next();
+    if (pathname === "/" || pathname === "/login" || pathname === "/dashboard" || pathname === "/pair") {
+      return NextResponse.next();
+    }
     return redirect(req, "/");
   }
 
   if (onApp) {
-    if (pathname === "/login" || pathname === "/dashboard") return NextResponse.next();
+    if (pathname === "/login" || pathname === "/dashboard" || pathname === "/pair") return NextResponse.next();
     return redirect(req, pathname === "/" ? "/login" : "/dashboard");
   }
 

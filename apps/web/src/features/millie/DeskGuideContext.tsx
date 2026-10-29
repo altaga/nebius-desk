@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import type { GuideAction, GuideTarget } from "./guideActions";
 
-export type MachineTab = "health" | "terminal" | "files" | "services";
+export type MachineTab = "health" | "terminal" | "files" | "services" | "agents";
 export type PanelTab = "chat" | "board" | "plan";
 export type BoardSection = "status" | "memory" | "experts" | "secrets";
 export type DeskView = "chat" | "machine";
@@ -204,7 +204,13 @@ export function DeskGuideProvider({
           if (action.target.startsWith("machine.")) {
             setView("machine");
             const tab = action.target.split(".")[1];
-            if (tab === "health" || tab === "terminal" || tab === "files" || tab === "services") {
+            if (
+              tab === "health" ||
+              tab === "terminal" ||
+              tab === "files" ||
+              tab === "services" ||
+              tab === "agents"
+            ) {
               setMachineTab(tab);
             } else if (tab === "browser") {
               setMachineTab("services");

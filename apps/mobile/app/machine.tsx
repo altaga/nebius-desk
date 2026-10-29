@@ -112,49 +112,6 @@ function TerminalPane({ deviceId, onError }: { deviceId: string; onError: (msg: 
   );
 }
 
-function TerminalPane({ deviceId, onError }: { deviceId: string; onError: (msg: string | null) => void }) {
-  const [log, setLog] = useState("");
-  const [line, setLine] = useState("");
-  const socket = useRef<WebSocket | null>(null);
-
-  useEffect(() => {
-    let ws: WebSocket | null = null;
-    let cancelled = false;
-    api()
-      .terminalTicket(deviceId)
-      .then((ticket) => {
-        if (cancelled) return;
-        ws = new WebSocket(ticket.ws_url);
-        socket.current = ws;
-        ws.onmessage = (ev) => {
-          const text = typeof ev.data === "string" ? ev.data : new TextDecoder().decode(ev.data as ArrayBuffer);
-          setLog((prev) => (prev + text).slice(-8000));
-        };
-      })
-      .catch((err: unknown) => onError(err instanceof Error ? err.message : "Terminal unavailable"));
-    return () => {
-      cancelled = true;
-      ws?.close();
-    };
-  }, [deviceId, onError]);
-
-  return (
-    <View style={{ gap: 8 }}>
-      <Text selectable>{log || "Connecting…"}</Text>
-      <TextInput
-        value={line}
-        onChangeText={setLine}
-        autoCapitalize="none"
-        placeholder="Command"
-        onSubmitEditing={() => {
-          socket.current?.send(JSON.stringify({ type: "input", data: line + "\n" }));
-          setLine("");
-        }}
-      />
-    </View>
-  );
-}
-
 function CliPane({ onError }: { onError: (msg: string | null) => void }) {
   const [command, setCommand] = useState("");
   const [log, setLog] = useState("");

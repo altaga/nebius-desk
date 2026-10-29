@@ -150,6 +150,7 @@ const TARGET_LABELS: Partial<Record<GuideTarget, Record<TourLang, string>>> = {
   "machine.terminal": L("Terminal", "Terminal"),
   "machine.files": L("Files", "Files"),
   "machine.services": L("Services", "Services"),
+  "machine.agents": L("Agents", "Agents"),
   "panel.chat": L("Panel Chat", "Chat panel"),
   "panel.board": L("Panel Board", "Board panel"),
   "panel.plan": L("Plan", "Plan"),

@@ -44,6 +44,6 @@ export async function verifyTotp(secret: string, code: string): Promise<boolean>
 }
 
 export function otpauthUrl(username: string, secret: string): string {
-  const label = encodeURIComponent(`NebiusDesk:${username}`);
-  return `otpauth://totp/${label}?secret=${secret}&issuer=NebiusDesk`;
+  const label = encodeURIComponent(`Nebius Desk:${username}`);
+  return `otpauth://totp/${label}?secret=${secret}&issuer=Nebius%20Desk`;
 }

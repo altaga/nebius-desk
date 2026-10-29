@@ -1,15 +1,17 @@
 # Fake boards for onboarding + multi-machine UI + cloud chat.
 # Nano / Lightning / Super via Nebius gateway (spends user credits).
-# No Auto route, no local model, no real CLI/FS.
-# Never name an emu "Millie" — that name is reserved for the real Jetson.
+# Real shell / files / health / jobs / browser inside each container.
+# No Auto route, no local model, no CUDA/Ollama.
+# Never name an emu "Millie" — that name is the waifu guide only.
+# Board names: Natasha, Nova, Orin. USB Jetson = Kratos.
 #
+# Web pairing (Plan A, Docker):
 #   cd apps/board-emu
 #   copy .env.example .env
 #   docker compose build
-#   docker compose run --rm natasha pair   # claim CODE in the desk
-#   docker compose run --rm nova pair
-#   docker compose run --rm orin pair
-#   docker compose up -d
+#   docker compose up -d natasha
+#   Open Desk at http://localhost:3000/pair
+#   Host ports: Natasha 18001, Nova 18002, Orin 18003
 #
 x-board: &board
   build:
@@ -21,12 +23,15 @@ x-board: &board
     CLOUD_URL: ${CLOUD_URL:-https://nebius-desk-cloud.devops-640.workers.dev}
     BOARD_EMU: "1"
     LLM_MODE: cloud_only
+    CORS_ORIGINS: "http://localhost:3000,http://127.0.0.1:3000,https://nebius-desk.vercel.app"
 
 # Persist under the host folder (Windows): C:\Users\VAI\Documents\Docker\board-emu\<board>\
 services:
   natasha:
     <<: *board
     hostname: Natasha
+    ports:
+      - "127.0.0.1:18001:8000"
     environment:
       <<: *board-env
       BOARD_NAME: Natasha
@@ -37,6 +42,8 @@ services:
   nova:
     <<: *board
     hostname: Nova
+    ports:
+      - "127.0.0.1:18002:8000"
     environment:
       <<: *board-env
       BOARD_NAME: Nova
@@ -47,6 +54,8 @@ services:
   orin:
     <<: *board
     hostname: Orin
+    ports:
+      - "127.0.0.1:18003:8000"
     environment:
       <<: *board-env
       BOARD_NAME: Orin

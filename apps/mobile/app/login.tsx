@@ -38,7 +38,7 @@ export default function LoginScreen() {
         <View style={styles.plate}>
           <Mark size={28} />
         </View>
-        <Text style={styles.brand}>NebiusDesk</Text>
+        <Text style={styles.brand}>Nebius Desk</Text>
       </View>
       <Text style={styles.sub}>Jetson · 2FA · hybrid tokens</Text>
 

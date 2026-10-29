@@ -1,0 +1,109 @@
+.card {
+  width: min(780px, 100%);
+  margin: 0 auto;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--raised);
+  display: grid;
+  gap: 10px;
+}
+
+.title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.item {
+  display: grid;
+  gap: 6px;
+}
+
+.explain {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.list code,
+.diff {
+  display: block;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.path {
+  color: var(--ink-2);
+  opacity: 0.85;
+}
+
+.del {
+  color: #fca5a5;
+}
+
+.add {
+  color: #86efac;
+}
+
+.row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.deny,
+.approve {
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.deny {
+  background: var(--hover);
+  color: var(--ink-2);
+}
+
+.approve {
+  background: var(--signal);
+  color: var(--signal-ink);
+}
+
+.deny:disabled,
+.approve:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

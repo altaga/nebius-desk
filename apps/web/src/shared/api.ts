@@ -1,7 +1,22 @@
-import type { ChatMessage, GuideTurnEvent, MissionThread, ModelChoice, SessionTelemetry, TurnEvent } from "./index";
+import type {
+  ApprovalAction,
+  ChatMessage,
+  GuideTurnEvent,
+  MissionThread,
+  ModelChoice,
+  SessionTelemetry,
+  TurnEvent,
+} from "./index";
 
 export type JetsonHealth = {
   host: string;
+  /** OS network hostname (may differ from fleet UI name). */
+  hostname?: string;
+  /** POSIX account that owns ~ / desk root. */
+  os_user?: string;
+  home?: string;
+  desk_root?: string;
+  desk_root_is_home?: boolean;
   model: string | null;
   jetson_online: boolean;
   uptime_sec: number | null;
@@ -30,7 +45,13 @@ export type CliResult = {
 
 export type FileListing = {
   root: string;
+  /** "~" when desk root is the operator home; else basename. */
+  root_label?: string;
+  is_home?: boolean;
+  /** Relative path under root; empty string at desk root. */
   path: string;
+  /** Parent relative path, or null at root. */
+  parent?: string | null;
   entries: Array<{ name: string; kind: "dir" | "file"; size: number | null }>;
 };
 import { DEFAULT_API_URL } from "./index";
@@ -244,12 +265,23 @@ export function createApiClient(opts: ApiClientOptions = {}) {
     ) => {
       await readSse(`${baseUrl}${resolve("/api/chat/message/stream")}`, body, onEvent as (e: unknown) => void, opts, signal);
     },
+    resolveApproval: (approvalId: string, decision: "approve" | "deny") =>
+      request<{ ok: boolean; approval_id: string; decision: string }>(
+        `/api/chat/approvals/${encodeURIComponent(approvalId)}`,
+        { method: "POST", body: JSON.stringify({ decision }) }
+      ),
     streamGuideMessage: async (
-      body: { content: string; session_id: string | null; device_id: string | null },
+      body: {
+        content: string;
+        session_id: string | null;
+        device_id: string | null;
+        desk?: { secret_names?: string[]; expert_names?: string[] };
+      },
       onEvent: (event: GuideTurnEvent) => void,
       signal?: AbortSignal
     ) => {
-      await readSse(`${baseUrl}${resolve("/api/guide/message/stream")}`, body, onEvent as (e: unknown) => void, opts, signal);
+      // Millie runs on cloud Nano with board context — never hop through the board relay.
+      await readSse(`${baseUrl}/v1/guide/message/stream`, body, onEvent as (e: unknown) => void, opts, signal);
     },
     listSessions: (deviceId?: string | null) =>
       request<
@@ -295,6 +327,11 @@ export function createApiClient(opts: ApiClientOptions = {}) {
       request<{ ok: boolean }>(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, {
         method: "DELETE",
       }),
+    deleteSessions: (ids: string[]) =>
+      request<{ ok: boolean; deleted: string[]; skipped_running: string[] }>("/api/chat/sessions/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      }),
     listBrains: () =>
       request<
         Array<{
@@ -338,6 +375,18 @@ export function createApiClient(opts: ApiClientOptions = {}) {
       request<ChatMessage[]>(
         `/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`
       ),
+    sessionStatus: (sessionId: string) =>
+      request<{
+        session_id: string;
+        status: string;
+        turn_active: boolean;
+        updated_at: string | null;
+        pending_approval?: {
+          approval_id: string;
+          actions: ApprovalAction[];
+          timeout_sec?: number;
+        } | null;
+      }>(`/api/chat/sessions/${encodeURIComponent(sessionId)}/status`),
     sessionTelemetry: (sessionId: string) =>
       request<SessionTelemetry>(`/api/telemetry/session/${sessionId}`),
     budget: () =>
@@ -387,12 +436,159 @@ export function createApiClient(opts: ApiClientOptions = {}) {
         local: { model: string; available: boolean; context_window: number };
       }>("/api/telemetry/models"),
     edgeStats: () => request<JetsonHealth>("/api/edge/health"),
+    edgeServices: () =>
+      request<{
+        services: Array<{
+          kind: string;
+          port?: number;
+          bind?: string;
+          process?: string | null;
+          url?: string | null;
+          http?: boolean;
+          likely_web?: boolean;
+          status?: number;
+          title?: string | null;
+          server?: string | null;
+        }>;
+        containers: Array<{
+          kind: string;
+          id?: string;
+          name?: string;
+          image?: string;
+          status?: string;
+          ports?: string;
+          url?: string | null;
+        }>;
+        previewable: Array<{ url?: string | null }>;
+        has_preview: boolean;
+      }>("/api/edge/services"),
+    listJobs: (limit = 40) =>
+      request<{
+        jobs: Array<{
+          id: string;
+          kind: string;
+          status: string;
+          payload: Record<string, unknown>;
+          result: Record<string, unknown>;
+          error: string | null;
+          created_at: string | null;
+          started_at: string | null;
+          finished_at: string | null;
+        }>;
+      }>(`/api/jobs?limit=${limit}`),
+    getJob: (jobId: string) =>
+      request<{
+        id: string;
+        kind: string;
+        status: string;
+        payload: Record<string, unknown>;
+        result: Record<string, unknown>;
+        error: string | null;
+        created_at: string | null;
+        started_at: string | null;
+        finished_at: string | null;
+      }>(`/api/jobs/${encodeURIComponent(jobId)}`),
+    cancelJob: (jobId: string) =>
+      request<{
+        id: string;
+        kind: string;
+        status: string;
+        payload: Record<string, unknown>;
+        result: Record<string, unknown>;
+        error: string | null;
+        created_at: string | null;
+        started_at: string | null;
+        finished_at: string | null;
+      }>(`/api/jobs/${encodeURIComponent(jobId)}/cancel`, { method: "POST" }),
+    dismissJob: (jobId: string) =>
+      request<{ ok: boolean; id: string; status: string }>(
+        `/api/jobs/${encodeURIComponent(jobId)}`,
+        { method: "DELETE" }
+      ),
+    listJobNotices: (opts?: { unread?: boolean; limit?: number }) => {
+      const q = new URLSearchParams();
+      if (opts?.unread) q.set("unread", "true");
+      if (opts?.limit) q.set("limit", String(opts.limit));
+      const qs = q.toString();
+      return request<{
+        notices: Array<{
+          id: number;
+          job_id: string | null;
+          kind: string;
+          title: string;
+          body: string;
+          read: boolean;
+          created_at: string | null;
+        }>;
+        unread: number;
+      }>(`/api/jobs/notices${qs ? `?${qs}` : ""}`);
+    },
+    readJobNotice: (noticeId: number) =>
+      request<Record<string, unknown>>(`/api/jobs/notices/${noticeId}/read`, { method: "POST" }),
+    browserStatus: () =>
+      request<{
+        playwright: boolean;
+        detail: string;
+        session_id: string | null;
+        url: string | null;
+        last_shot: string | null;
+        headed: boolean;
+        artifacts: Array<{
+          path: string;
+          name: string;
+          run: string;
+          bytes: number;
+          mtime: number;
+          kind: string;
+        }>;
+      }>("/api/browser/status"),
+    browserAction: (body: {
+      action: string;
+      url?: string;
+      selector?: string;
+      text?: string;
+      headed?: boolean;
+      input?: "click" | "scroll" | "key" | "text";
+      x?: number;
+      y?: number;
+      dy?: number;
+      key?: string;
+      width?: number;
+      height?: number;
+    }) =>
+      request<Record<string, unknown>>("/api/browser/action", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    browserWarm: () =>
+      request<{ ok: boolean; warm?: boolean; session_id?: string }>("/api/browser/warm", { method: "POST" }),
+    browserClose: () => request<{ ok: boolean; closed: boolean }>("/api/browser/close", { method: "POST" }),
+    browserArtifactBlob: async (path: string) => {
+      const headers = new Headers();
+      const token = opts.getToken?.();
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const res = await fetch(
+        `${baseUrl}${resolve(`/api/browser/artifacts/file?path=${encodeURIComponent(path)}`)}`,
+        { headers }
+      );
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    },
     runCli: (command: string) =>
       request<CliResult>("/api/edge/cli", { method: "POST", body: JSON.stringify({ command }) }),
+    /** Same-origin URL for <video>/<img>; the BFF adds auth from the session cookie. */
+    rawFileUrl: (path: string) => `${baseUrl}${resolve(`/api/edge/files/raw?path=${encodeURIComponent(path)}`)}`,
     listFiles: (path = "") =>
       request<FileListing>(`/api/edge/files?path=${encodeURIComponent(path)}`),
     readFile: (path: string) =>
-      request<{ path: string; content: string }>(`/api/edge/files/read?path=${encodeURIComponent(path)}`),
+      request<{
+        path: string;
+        content: string;
+        encoding?: "utf-8" | "base64";
+        media_type?: string;
+        bytes?: number;
+      }>(`/api/edge/files/read?path=${encodeURIComponent(path)}`),
     writeFile: (path: string, content: string) =>
       request<{ path: string; bytes: number }>("/api/edge/files", {
         method: "PUT",
@@ -403,6 +599,53 @@ export function createApiClient(opts: ApiClientOptions = {}) {
         method: "POST",
         body: JSON.stringify({ path, old, new: neu }),
       }),
+    mkdir: (path: string) =>
+      request<{ path: string; ok: boolean }>("/api/edge/files/mkdir", {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      }),
+    createFile: (path: string) =>
+      request<{ path: string; ok: boolean }>("/api/edge/files/create", {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      }),
+    uploadFile: (path: string, contentB64: string, overwrite = true) =>
+      request<{ path: string; bytes: number }>("/api/edge/files/upload", {
+        method: "POST",
+        body: JSON.stringify({ path, content_b64: contentB64, overwrite }),
+      }),
+    renameFile: (path: string, name: string) =>
+      request<{ path: string; ok: boolean }>("/api/edge/files/rename", {
+        method: "POST",
+        body: JSON.stringify({ path, name }),
+      }),
+    deleteFile: (path: string) =>
+      request<{ path: string; ok: boolean }>("/api/edge/files/delete", {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      }),
+    /** Millie UI apply report — privacy-safe (no spoken text). */
+    reportGuideApply: (body: {
+      trace_id?: string | null;
+      session_id?: string | null;
+      device_id?: string | null;
+      actions: Array<{
+        type: string;
+        target?: string;
+        board?: string;
+        emotion?: string;
+        status?: string;
+        reason?: string;
+      }>;
+    }) =>
+      request<{ ok: boolean }>("/v1/ops/guide-apply", {
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    opsFailures: (limit = 20) =>
+      request<{ ok: boolean; data: { count: number; failures: unknown[] } }>(
+        `/v1/ops/me/failures?limit=${limit}`
+      ),
     listThreads: (agentId?: string) =>
       request<{ threads: MissionThread[] }>(
         `/api/missions/threads${agentId ? `?agent_id=${encodeURIComponent(agentId)}` : ""}`

@@ -116,8 +116,12 @@ def open_http() -> httpx.AsyncClient:
 
 
 def board_name() -> str:
+    """Fleet display name. Millie is only the UI guide — never the board."""
     host = socket.gethostname().strip() or "jetson"
-    return "Millie" if host.lower() == "millie" else host
+    # OS hostname may still be leftover "millie"; desk fleet name is Kratos.
+    if host.lower() in {"millie", "kratos", "jetson", "localhost"}:
+        return "Kratos"
+    return host
 
 
 class Agent:

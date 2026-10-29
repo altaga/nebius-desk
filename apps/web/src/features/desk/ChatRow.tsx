@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { CheckMark } from "@/features/desk/CheckMark";
 import { TitleRename } from "@/features/desk/TitleRename";
 import type { SessionRow } from "@/features/desk/types";
 import { IconDots, IconPencil, IconPin, IconTrash } from "@/ui/icons";
@@ -98,7 +99,49 @@ export function ChatRow({ row, active, onSelect, onRename, onPin, onDelete }: Pr
   );
 }
 
-function DeleteChatDialog({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+/** Checkbox row used while bulk-selecting; clicking anywhere toggles it. */
+export function SelectableChatRow({
+  row,
+  checked,
+  onToggle,
+}: {
+  row: SessionRow;
+  checked: boolean;
+  onToggle: (range: boolean) => void;
+}) {
+  return (
+    <li className={styles.row} data-checked={checked}>
+      <label
+        className={`${styles.title} ${styles.pickable}`}
+        onClick={(e) => {
+          e.preventDefault();
+          onToggle(e.shiftKey);
+        }}
+      >
+        <input
+          type="checkbox"
+          className={styles.srOnly}
+          checked={checked}
+          readOnly
+          aria-label={`Select ${row.title || "Untitled chat"}`}
+        />
+        <CheckMark state={checked ? "on" : "off"} />
+        {row.pinned ? <IconPin size={12} className={styles.pinMark} /> : null}
+        <span>{row.title || "Untitled chat"}</span>
+      </label>
+    </li>
+  );
+}
+
+export function DeleteChatDialog({
+  prompt = "Delete this chat and its history?",
+  onCancel,
+  onConfirm,
+}: {
+  prompt?: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
   const titleId = useId();
 
   useEffect(() => {
@@ -118,7 +161,7 @@ function DeleteChatDialog({ onCancel, onConfirm }: { onCancel: () => void; onCon
         aria-labelledby={titleId}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <p id={titleId}>Delete this chat and its history?</p>
+        <p id={titleId}>{prompt}</p>
         <div className={styles.confirmRow}>
           <button type="button" autoFocus onClick={onCancel}>
             Cancel

@@ -1,0 +1,6 @@
+# Optional: board browser runtime (P3). Install on the Jetson/board host:
+#   pip install -r requirements-browser.txt
+#   playwright install chromium
+playwright==1.49.1
+# Static ffmpeg with libx264 for ```record``` mp4/gif output (Jetson's apt ffmpeg is NVENC-only).
+imageio-ffmpeg>=0.5

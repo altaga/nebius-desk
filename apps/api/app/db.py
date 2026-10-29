@@ -39,6 +39,7 @@ def init_db() -> None:
     from app.brains import models as _brain_models  # noqa: F401
     from app.chat import models as _chat_models  # noqa: F401
     from app.devices import models as _device_models  # noqa: F401
+    from app.jobs import models as _job_models  # noqa: F401
     from app.subscription import models as _sub_models  # noqa: F401
     from app.telemetry import models as _tel_models  # noqa: F401
     from app.tools import models as _tool_models  # noqa: F401

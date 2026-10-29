@@ -23,10 +23,22 @@ class BuiltContext:
 
 
 def system_prompt(device_name: str, shared_memory: str, desk_context: str = "") -> dict:
+    board = (device_name or "").strip() or "Kratos"
     text = (
-        f"You are Millie, the assistant for the operator of '{device_name}'. "
-        "Answer in the user's language. Be direct and concrete; use Markdown "
-        "for structure and fenced code blocks for code."
+        f"You are {board}, the edge agent on this desk board. "
+        f"Your name is {board} — speak as {board}, never as Millie. "
+        "Millie is only the separate UI guide avatar in the corner; she is not you and not this board. "
+        "Always reply in English. Be direct and concrete; use Markdown "
+        "for structure and fenced code blocks for code. "
+        "Do not introduce yourself or name the model unless the user asks who you are or which model you are. "
+        "Never invent board operators, Alice/Bob/Carol, pending-action IDs, fake dates, "
+        "active-user counts, or multi-agent status tables. "
+        "For shell/files/browser/install you MUST emit a real fence "
+        "(```run``` / ```list``` / ```read``` / ```install``` / ```browse``` / ```search```) "
+        "in the same reply — never narrate that you ran a tool, never say "
+        "'run fence creado' / 'ejecutando' / 'voy a instalar' without the fence body. "
+        "A reply with zero fences when the user asked to act on the board is a failure. "
+        "After a tool runs, reply in 1–3 short sentences from the tool output; nothing else."
     )
     if shared_memory:
         text += f"\n\n{shared_memory}"
@@ -51,27 +63,56 @@ def _face(model: str) -> str:
 
 
 _VERSION_ASK = re.compile(r"\b(version|versi[oó]n|model id|exact id|build)\b", re.I)
+_IDENTITY_ASK = re.compile(
+    r"(?i)\b("
+    r"who are you|what are you|which model|what model|qué modelo|que modelo|"
+    r"qui[eé]n eres|qu[eé] eres|c[oó]mo te llamas|your name|tu nombre"
+    r")\b"
+)
+
+
+def wants_identity(user_text: str) -> bool:
+    return bool(_IDENTITY_ASK.search(user_text or "") or _VERSION_ASK.search(user_text or ""))
 
 
 def _where(device_name: str, on_device: bool) -> str:
     if not on_device:
         return " on Nebius"
-    if device_name.strip().lower() == "millie":
-        return ""
-    return f" on {device_name}"
+    clean = device_name.strip() or "Kratos"
+    return f" on {clean}"
 
 
 def named_system(system: dict, *, model: str, device_name: str, on_device: bool, user_text: str) -> dict:
+    """Only pin the spoken identity line when the user asked who/which model."""
+    if not wants_identity(user_text):
+        return system
+    board = (device_name or "").strip() or "Kratos"
     face = _face(model)
     where = _where(device_name, on_device)
-    who = f"I am Millie, running {face} version {model}{where}." if _VERSION_ASK.search(user_text) else f"I am Millie, running {face}{where}."
-    lead = f"You are Millie. If asked who you are or which model you are, answer exactly: {who}"
+    who = (
+        f"I am {board}, running {face} version {model}{where}."
+        if _VERSION_ASK.search(user_text)
+        else f"I am {board}, running {face}{where}."
+    )
+    lead = (
+        f"You are {board} (never Millie). The user asked who you are or which model you are. "
+        f"Answer exactly: {who}"
+    )
     return {"role": "system", "content": f"{lead}\n\n{system['content']}"}
 
 
+def _with_history_note(system: dict, note: str) -> dict:
+    if not note:
+        return system
+    return {"role": "system", "content": f"{system['content']}\n\n{note}"}
+
+
 def local_context(settings: Settings, system: dict, history: list[dict], user_text: str) -> BuiltContext:
-    recent = history[-settings.local_history_messages :]
-    messages = [system, *recent, {"role": "user", "content": user_text}]
+    from app.chat.history import build_history
+
+    bundle = build_history(history, user_text, max_messages=settings.local_history_messages)
+    spoken = _with_history_note(system, bundle.note)
+    messages = [spoken, *bundle.messages, {"role": "user", "content": user_text}]
     full = estimate_messages_tokens([system, *history, {"role": "user", "content": user_text}])
     return BuiltContext(messages, full, estimate_messages_tokens(messages), False, 0)
 
@@ -79,8 +120,13 @@ def local_context(settings: Settings, system: dict, history: list[dict], user_te
 async def cloud_context(
     settings: Settings, system: dict, history: list[dict], user_text: str, local_ok: bool
 ) -> BuiltContext:
+    from app.chat.history import build_history
+
     user = {"role": "user", "content": user_text}
-    full_messages = [system, *history, user]
+    bundle = build_history(history, user_text, max_messages=max(settings.cloud_recent_messages * 2, 12))
+    history = bundle.messages
+    spoken = _with_history_note(system, bundle.note)
+    full_messages = [spoken, *history, user]
     original = estimate_messages_tokens(full_messages)
     keep = settings.cloud_recent_messages
     if original <= settings.compress_after_tokens or len(history) <= keep or not local_ok:
@@ -100,7 +146,7 @@ async def cloud_context(
         return BuiltContext(full_messages, original, original, False, 0)
 
     summary_msg = {"role": "system", "content": f"Summary of the earlier conversation:\n{summary}"}
-    messages = [system, summary_msg, *recent, user]
+    messages = [spoken, summary_msg, *recent, user]
     return BuiltContext(
         messages,
         original,

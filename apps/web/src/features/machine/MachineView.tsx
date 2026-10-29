@@ -1,15 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JetsonHealth } from "@/shared/api";
 import type { DeviceRow } from "@/features/desk/types";
 import { api } from "@/lib/api";
 import { BoardName } from "./BoardName";
 import { FilesPane } from "./FilesPane";
+import { JobsPane } from "./JobsPane";
+import { ServicesPane } from "./ServicesPane";
 import { TerminalPane } from "./TerminalPane";
 import styles from "./Machine.module.css";
 
-export type MachineTab = "health" | "terminal" | "files";
+export type MachineTab = "health" | "terminal" | "files" | "services" | "agents";
+
+const HEALTH_POLL_MS = 15_000;
 
 function num(value: number | null | undefined, suffix = "") {
   return value == null ? "—" : `${value}${suffix}`;
@@ -33,31 +37,45 @@ export function MachineView({ device, onRename, tab: tabProp, onTab }: Props) {
   const [health, setHealth] = useState<JetsonHealth | null>(null);
   const [healthError, setHealthError] = useState<string | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const healthSeen = useRef(false);
+  const healthSeq = useRef(0);
 
-  const loadHealth = useCallback(() => {
-    setHealthLoading(true);
+  const loadHealth = useCallback((quiet: boolean) => {
+    const id = ++healthSeq.current;
+    if (!quiet) setHealthLoading(true);
     api()
       .edgeStats()
       .then((data) => {
+        if (id !== healthSeq.current) return;
+        healthSeen.current = true;
         setHealth(data);
         setHealthError(null);
       })
-      .catch((err: unknown) => setHealthError(err instanceof Error ? err.message : "Health unavailable"))
-      .finally(() => setHealthLoading(false));
+      .catch((err: unknown) => {
+        if (id !== healthSeq.current || healthSeen.current) return;
+        setHealthError(err instanceof Error ? err.message : "Health unavailable");
+      })
+      .finally(() => {
+        if (id === healthSeq.current && !quiet) setHealthLoading(false);
+      });
   }, []);
 
-  // Prefetch as soon as Machine opens — don't wait for the Health tab click.
   useEffect(() => {
-    loadHealth();
-  }, [device.id, loadHealth]);
+    healthSeen.current = false;
+    healthSeq.current += 1;
+    setHealth(null);
+    setHealthError(null);
+  }, [device.id]);
 
   useEffect(() => {
     if (tab !== "health") return;
-    const id = window.setInterval(loadHealth, 4000);
+    loadHealth(false);
+    const id = window.setInterval(() => loadHealth(true), HEALTH_POLL_MS);
     return () => window.clearInterval(id);
-  }, [tab, loadHealth]);
+  }, [tab, device.id, loadHealth]);
 
-  const fill = tab === "terminal" || tab === "files";
+  const fill =
+    tab === "terminal" || tab === "files" || tab === "services" || tab === "agents";
 
   return (
     <section className={styles.view} aria-label="Machine">
@@ -80,6 +98,8 @@ export function MachineView({ device, onRename, tab: tabProp, onTab }: Props) {
             ["health", "Health", "machine.health"],
             ["terminal", "Terminal", "machine.terminal"],
             ["files", "Files", "machine.files"],
+            ["services", "Services", "machine.services"],
+            ["agents", "Agents", "machine.agents"],
           ] as const
         ).map(([id, label, guide]) => (
           <button
@@ -97,10 +117,15 @@ export function MachineView({ device, onRename, tab: tabProp, onTab }: Props) {
       </div>
       <div className={styles.body} data-fill={fill}>
         {tab === "health" ? (
-          <HealthPane health={health} error={healthError} loading={healthLoading} onRefresh={loadHealth} />
+          <HealthPane health={health} fleetName={device.name} error={healthError} loading={healthLoading} />
         ) : null}
         {tab === "terminal" ? <TerminalPane deviceId={device.id} /> : null}
-        {tab === "files" ? <FilesPane /> : null}
+        {/* Keep mounted so cwd / open file survive tab switches. */}
+        <div hidden={tab !== "files"} className={styles.keepPane}>
+          <FilesPane key={device.id} deviceId={device.id} />
+        </div>
+        {tab === "services" ? <ServicesPane key={device.id} /> : null}
+        {tab === "agents" ? <JobsPane key={device.id} deviceId={device.id} /> : null}
       </div>
     </section>
   );
@@ -108,14 +133,14 @@ export function MachineView({ device, onRename, tab: tabProp, onTab }: Props) {
 
 function HealthPane({
   health,
+  fleetName,
   error,
   loading,
-  onRefresh,
 }: {
   health: JetsonHealth | null;
+  fleetName: string;
   error: string | null;
   loading: boolean;
-  onRefresh: () => void;
 }) {
   const ram =
     health?.ram_used_mb != null && health.ram_total_mb != null
@@ -125,13 +150,15 @@ function HealthPane({
     health?.disk_used_gb != null && health.disk_total_gb != null
       ? `${health.disk_used_gb} / ${health.disk_total_gb} GB`
       : "—";
+  const host = health?.hostname || health?.host || "—";
+  const home = health?.home || health?.desk_root || "—";
   if (health && !health.jetson_online) {
     return (
       <>
         <p className={styles.note}>
-          No Jetson is reporting. The API is running on {health.host}, which has no board sensors.
+          No Jetson is reporting. The API is running on {host} as {health.os_user || "unknown"}, which has no board
+          sensors.
         </p>
-        <button type="button" className={styles.action} onClick={onRefresh}>Check again</button>
       </>
     );
   }
@@ -140,6 +167,10 @@ function HealthPane({
       {error ? <p className={styles.error}>{error}</p> : null}
       {!health && loading ? <p className={styles.note}>Reading sensors…</p> : null}
       <dl className={styles.grid}>
+        <div><dt>Fleet</dt><dd>{fleetName}</dd></div>
+        <div><dt>Hostname</dt><dd>{host}</dd></div>
+        <div><dt>OS user</dt><dd>{health?.os_user || "—"}</dd></div>
+        <div><dt>Home</dt><dd title={home}>{home}</dd></div>
         <div><dt>Temperature</dt><dd>{num(health?.temp_c, " °C")}</dd></div>
         <div><dt>CPU</dt><dd>{num(health?.cpu_pct, "%")}</dd></div>
         <div><dt>GPU</dt><dd>{num(health?.gpu_util_pct, "%")}</dd></div>
@@ -147,12 +178,8 @@ function HealthPane({
         <div><dt>Disk</dt><dd>{disk}</dd></div>
       </dl>
       <p className={styles.note}>
-        {health?.jetson_online ? health.host : "Readings come from the host. Missing sensors stay blank."}
-        {loading && health ? " · updating…" : ""}
+        Fleet is the Desk label; hostname is the OS network name; OS user owns ~.
       </p>
-      <button type="button" className={styles.action} onClick={onRefresh} disabled={loading}>
-        Refresh
-      </button>
     </>
   );
 }

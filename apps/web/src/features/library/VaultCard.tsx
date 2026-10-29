@@ -90,7 +90,9 @@ export function VaultCard({ onCount }: { onCount?: (count: number) => void }) {
         <h3>Execution secrets</h3>
         <span className={styles.num}>{names.length}</span>
       </header>
-      <p className={styles.footnote}>Chats can use the names. The desk never shows the values again.</p>
+      <p className={styles.footnote}>
+        Keychain for the board: chats and the shell can USE the names as env vars. Nobody can READ the values again.
+      </p>
       {loading ? <p className={styles.muted}>Loading…</p> : null}
       {!loading && names.length === 0 ? <p className={styles.muted}>No secrets yet.</p> : null}
       <ul className={styles.notes}>

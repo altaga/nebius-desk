@@ -109,16 +109,18 @@ export function TopBar(p: Props) {
           <span data-route="edge">Jetson</span>
           <span data-route="cloud">Nebius</span>
         </div>
-        <button
-          type="button"
-          className={styles.icon}
-          aria-pressed={p.panelOpen}
-          aria-label={p.panelOpen ? "Hide telemetry" : "Show telemetry"}
-          title="Telemetry (Ctrl .)"
-          onClick={p.onTogglePanel}
-        >
-          <IconPanelRight size={16} />
-        </button>
+        {!p.panelOpen ? (
+          <button
+            type="button"
+            className={styles.icon}
+            aria-pressed={false}
+            aria-label="Show telemetry"
+            title="Telemetry (Ctrl .)"
+            onClick={p.onTogglePanel}
+          >
+            <IconPanelRight size={16} />
+          </button>
+        ) : null}
       </div>
     </header>
   );

@@ -110,14 +110,39 @@ function parse(src: string): Block[] {
   return out;
 }
 
+// Only http(s) ever becomes an href — model output must not be able to inject javascript: links.
+const MD_LINK = /^\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)$/;
+const TRAILING_PUNCT = /[.,;:!?'"]+$/;
+
+function link(href: string, label: ReactNode, key: number): ReactNode {
+  return (
+    <a key={key} href={href} target="_blank" rel="noopener noreferrer nofollow" className={styles.link}>
+      {label}
+    </a>
+  );
+}
+
 function inline(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
-  const re = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g;
+  const re = /(\[[^\]\n]+\]\(https?:\/\/[^\s)]+\)|https?:\/\/[^\s<>()]+|\*\*[^*]+\*\*|`[^`]+`|\*[^*\s][^*]*\*)/g;
   let last = 0;
   let key = 0;
   for (let m = re.exec(text); m; m = re.exec(text)) {
     if (m.index > last) nodes.push(text.slice(last, m.index));
-    const t = m[0];
+    let t = m[0];
+    const md = t.match(MD_LINK);
+    if (md) {
+      nodes.push(link(md[2], md[1], key++));
+      last = m.index + t.length;
+      continue;
+    }
+    if (t.startsWith("http")) {
+      const trail = t.match(TRAILING_PUNCT)?.[0] ?? "";
+      t = t.slice(0, t.length - trail.length);
+      nodes.push(link(t, t.replace(/^https?:\/\/(www\.)?/, ""), key++));
+      last = m.index + t.length;
+      continue;
+    }
     if (t.startsWith("**")) nodes.push(<strong key={key++}>{t.slice(2, -2)}</strong>);
     else if (t.startsWith("`"))
       nodes.push(

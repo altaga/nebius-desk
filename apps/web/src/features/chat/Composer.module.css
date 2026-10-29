@@ -55,6 +55,17 @@
   color: var(--ink-3);
 }
 
+.counter {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.counter[data-over="true"] {
+  color: var(--danger);
+}
+
 .status {
   width: 6px;
   height: 6px;

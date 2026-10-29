@@ -49,6 +49,7 @@ export type GuideTarget =
   | "machine.terminal"
   | "machine.files"
   | "machine.services"
+  | "machine.agents"
   | "panel.chat"
   | "panel.board"
   | "panel.plan"
@@ -74,6 +75,7 @@ const TARGETS = new Set<string>([
   "machine.terminal",
   "machine.files",
   "machine.services",
+  "machine.agents",
   "panel.chat",
   "panel.board",
   "panel.plan",

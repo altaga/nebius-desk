@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.cloudlink import cloud_config
 from app.config import get_settings
+from app.ops.emit import emit_ops
+from app.tools.breaker import is_open, record_failure, record_success
 from app.tools.credits import BASIC_SEARCH_CREDITS, TavilyCapReached, credits_remaining, refund, reserve
+
+_BREAKER = "tavily"
 
 
 def _mock(query: str) -> dict:
@@ -57,24 +61,57 @@ async def _cloud_search(url: str, token: str, query: str, max_results: int) -> d
 
 
 async def web_search(db: Session, query: str, max_results: int = 5, credit_cap: int | None = None) -> dict:
-    cloud = cloud_config()
-    if cloud:
-        return await _cloud_search(cloud[0], cloud[1], query, max_results)
-    settings = get_settings()
-    if not settings.tavily_api_key:
-        return _mock(query)
+    if is_open(_BREAKER):
+        emit_ops(
+            {
+                "kind": "tavily",
+                "status": "error",
+                "error_code": "circuit_open",
+                "note": "tavily breaker open — soft fail",
+            }
+        )
+        data = _mock(query)
+        data["circuit_open"] = True
+        data["error"] = "Tavily circuit open — using soft fallback"
+        return data
 
-    cap = settings.tavily_credit_cap if credit_cap is None else credit_cap
-    remaining = reserve(db, cap, BASIC_SEARCH_CREDITS, query)
+    cloud = cloud_config()
     try:
-        data = await _basic_search(settings.tavily_api_key, query, max_results)
-    except Exception:
-        refund(db, BASIC_SEARCH_CREDITS, query)
+        if cloud:
+            data = await _cloud_search(cloud[0], cloud[1], query, max_results)
+        else:
+            settings = get_settings()
+            if not settings.tavily_api_key:
+                return _mock(query)
+
+            cap = settings.tavily_credit_cap if credit_cap is None else credit_cap
+            remaining = reserve(db, cap, BASIC_SEARCH_CREDITS, query)
+            try:
+                data = await _basic_search(settings.tavily_api_key, query, max_results)
+            except Exception:
+                refund(db, BASIC_SEARCH_CREDITS, query)
+                raise
+            data["credits_charged"] = BASIC_SEARCH_CREDITS
+            data["credits_remaining"] = remaining
+            data["credit_cap"] = cap
+        record_success(_BREAKER)
+        return data
+    except TavilyCapReached:
         raise
-    data["credits_charged"] = BASIC_SEARCH_CREDITS
-    data["credits_remaining"] = remaining
-    data["credit_cap"] = cap
-    return data
+    except Exception as exc:
+        opened = record_failure(_BREAKER, str(exc))
+        emit_ops(
+            {
+                "kind": "tavily",
+                "status": "error",
+                "error_code": "circuit_open" if opened else "upstream_error",
+                "note": str(exc)[:200],
+            }
+        )
+        data = _mock(query)
+        data["circuit_open"] = opened
+        data["error"] = f"Tavily upstream failed ({type(exc).__name__}) — soft fallback"
+        return data
 
 
 def credit_status(db: Session) -> dict:

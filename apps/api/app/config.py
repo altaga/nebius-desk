@@ -10,9 +10,10 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "NebiusDesk"
+    app_name: str = "Nebius Desk"
     llm_mode: str = "hybrid"  # hybrid | cloud_only | local_only
-    # Docker board-emu: chat via Nebius only (nano/lightning/super). No local, no auto-route, no real CLI/FS.
+    # Docker board-emu: chat via Nebius only (nano/lightning/super). No local, no auto-route.
+    # Shell/files/jobs/browser still run inside the container.
     board_emu: bool = False
 
     jwt_secret: str = "change-me-to-a-long-random-string"
@@ -46,17 +47,30 @@ class Settings(BaseSettings):
     tavily_credit_cap: int = 1500
     # Paired boards send Nebius and Tavily through the central gateway.
     desk_cloud_url: str = ""
+    # board-emu compose sets CLOUD_URL; same cloud the pair/start call hits.
+    cloud_url: str = ""
     desk_device_token: str = ""
     desk_relay_secret: str = ""
     # Remote files and the CLI start here. Empty means the account home on the Jetson.
     desk_fs_root: str = ""
 
-    cors_origins: str = "http://localhost:3000,http://localhost:8081,http://127.0.0.1:3000"
+    cors_origins: str = (
+        "http://localhost:3000,http://localhost:8081,http://127.0.0.1:3000,"
+        "https://nebius-desk.vercel.app"
+    )
     database_url: str = "sqlite:///./data/nebiusdesk.db"
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def cors_origin_regex(self) -> str:
+        # Desk on localhost (any port) must probe the Docker/USB board.
+        return (
+            r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+            r"|https://nebius-desk(\.vercel\.app|-[a-z0-9-]+\.vercel\.app)"
+        )
 
 
 @lru_cache

@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { ChatMessage } from "@nebius-desk/shared/index";
 import { fmtCost, fmtCount, fmtMs, shortModel } from "@/features/chat/format";
+import { ActivityFeed } from "@/features/chat/ActivityFeed";
+import { stepsFromRuns, type LiveStep } from "@/features/chat/liveProgress";
 import { MessageBody } from "@/features/chat/MessageBody";
 import { RouteDetails } from "@/features/chat/RouteDetails";
 import { ThinkingBlock } from "@/features/chat/ThinkingBlock";
@@ -16,6 +18,9 @@ type Props = {
   isLast: boolean;
   onRetry: () => void;
   deviceName?: string;
+  /** Steps for the turn that is still running. Saved turns read meta.tool_runs. */
+  liveSteps?: LiveStep[];
+  liveStatus?: string | null;
 };
 
 export function routeOf(meta: ChatMessage["meta"]): "edge" | "cloud" | null {
@@ -29,7 +34,14 @@ function summary(meta: NonNullable<ChatMessage["meta"]>, pending: boolean): stri
   return [`${fmtCount(tokens)} tok`, fmtCost(meta.cost_usd), fmtMs(meta.latency_ms)].filter(Boolean).join(" · ");
 }
 
-export function AssistantTurn({ message, isLast, onRetry, deviceName = "Board" }: Props) {
+export function AssistantTurn({
+  message,
+  isLast,
+  onRetry,
+  deviceName = "Board",
+  liveSteps,
+  liveStatus,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const meta = message.meta;
@@ -70,9 +82,18 @@ export function AssistantTurn({ message, isLast, onRetry, deviceName = "Board" }
         <ThinkingBlock text={meta.thinking} live={pending && !message.content} tokens={meta.reasoning_tokens} />
       ) : null}
 
+      {liveSteps ? (
+        <ActivityFeed
+          steps={liveSteps}
+          live
+          note={liveStatus && liveStatus !== "Running board tools…" ? liveStatus : null}
+        />
+      ) : null}
+      {!pending && meta?.tool_runs?.length ? <ActivityFeed steps={stepsFromRuns(meta.tool_runs)} /> : null}
+
       {message.content ? (
         <MessageBody content={message.content} />
-      ) : pending ? (
+      ) : pending && !liveSteps?.length ? (
         <span className={styles.caret} aria-label="Waiting for the first token" />
       ) : null}
 

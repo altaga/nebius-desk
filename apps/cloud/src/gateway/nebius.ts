@@ -1,6 +1,8 @@
 import { DeviceRow } from "../devices/service";
 import { Env, nowSec } from "../env";
 import { HttpError } from "../http";
+import { chatFeatures, lenBucket } from "../ops/features";
+import { recordOpsEvent, usernameFor } from "../ops/service";
 import { balance } from "../subscription/service";
 import { costUsd } from "./pricing";
 
@@ -19,6 +21,21 @@ function chatBody(body: Record<string, unknown>): Record<string, unknown> & { mo
     stream: true,
     stream_options: { include_usage: true },
   };
+}
+
+function lastUserText(messages: unknown): string {
+  if (!Array.isArray(messages)) return "";
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as { role?: string; content?: unknown };
+    if (m?.role !== "user") continue;
+    if (typeof m.content === "string") return m.content;
+    if (Array.isArray(m.content)) {
+      return m.content
+        .map((p) => (p && typeof p === "object" && "text" in p ? String((p as { text: unknown }).text) : ""))
+        .join("");
+    }
+  }
+  return "";
 }
 
 /** Reads a copy of the SSE stream to the end and returns the final usage block. */
@@ -61,10 +78,53 @@ export async function proxyNebius(
   device: DeviceRow,
   body: Record<string, unknown>
 ): Promise<Response> {
-  if (!env.NEBIUS_API_KEY) throw new HttpError(503, "gateway_unconfigured");
+  const t0 = Date.now();
+  const username = await usernameFor(env, device.user_id);
+  const userText = lastUserText(body.messages);
+
+  if (!env.NEBIUS_API_KEY) {
+    await recordOpsEvent(env, {
+      kind: "gateway",
+      status: "error",
+      error_code: "gateway_unconfigured",
+      user_id: device.user_id,
+      username,
+      device_id: device.id,
+      features: { msg_len: lenBucket(userText) },
+      input_text: userText,
+      latency_ms: Date.now() - t0,
+    });
+    throw new HttpError(503, "gateway_unconfigured");
+  }
   const bal = await balance(env, device.user_id);
-  if (!bal.active) throw new HttpError(402, "subscription_inactive");
-  if (bal.cloud_remaining_usd <= 0) throw new HttpError(402, "cloud_credit_used", { spent: bal.cloud_spent_usd });
+  if (!bal.active) {
+    await recordOpsEvent(env, {
+      kind: "gateway",
+      status: "error",
+      error_code: "subscription_inactive",
+      user_id: device.user_id,
+      username,
+      device_id: device.id,
+      features: chatFeatures(userText, ""),
+      input_text: userText,
+      latency_ms: Date.now() - t0,
+    });
+    throw new HttpError(402, "subscription_inactive");
+  }
+  if (bal.cloud_remaining_usd <= 0) {
+    await recordOpsEvent(env, {
+      kind: "gateway",
+      status: "error",
+      error_code: "cloud_credit_used",
+      user_id: device.user_id,
+      username,
+      device_id: device.id,
+      features: chatFeatures(userText, ""),
+      input_text: userText,
+      latency_ms: Date.now() - t0,
+    });
+    throw new HttpError(402, "cloud_credit_used", { spent: bal.cloud_spent_usd });
+  }
 
   const payload = chatBody(body);
   const upstream = await fetch(`${env.NEBIUS_BASE_URL.replace(/\/$/, "")}/chat/completions`, {
@@ -74,13 +134,47 @@ export async function proxyNebius(
   });
   if (!upstream.ok || !upstream.body) {
     const detail = (await upstream.text()).slice(0, 300);
+    await recordOpsEvent(env, {
+      kind: "gateway",
+      status: "error",
+      error_code: "nebius_error",
+      user_id: device.user_id,
+      username,
+      device_id: device.id,
+      model: payload.model,
+      features: chatFeatures(userText, ""),
+      input_text: userText,
+      latency_ms: Date.now() - t0,
+      note: `status=${upstream.status} body=${detail.slice(0, 180)}`,
+    });
     return new Response(JSON.stringify({ detail: { error: "nebius_error", status: upstream.status, body: detail } }), {
       status: upstream.status >= 500 ? 502 : upstream.status,
       headers: { "content-type": "application/json" },
     });
   }
   const [toBoard, toMeter] = upstream.body.tee();
-  ctx.waitUntil(readUsage(toMeter).then((usage) => record(env, device, payload.model, usage)));
+  ctx.waitUntil(
+    readUsage(toMeter).then(async (usage) => {
+      await record(env, device, payload.model, usage);
+      const cost = await costUsd(payload.model, usage.prompt_tokens, usage.completion_tokens);
+      await recordOpsEvent(env, {
+        kind: "gateway",
+        status: "ok",
+        user_id: device.user_id,
+        username,
+        device_id: device.id,
+        model: payload.model,
+        route: "nebius",
+        latency_ms: Date.now() - t0,
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        cost_usd: cost,
+        features: chatFeatures(userText, "", { stream: true }),
+        input_text: userText,
+        note: "gateway_stream_complete",
+      });
+    })
+  );
   return new Response(toBoard, {
     headers: { "content-type": "text/event-stream", "cache-control": "no-cache" },
   });

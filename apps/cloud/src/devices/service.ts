@@ -2,6 +2,9 @@ import { sha256Hex } from "../crypto";
 import { Env } from "../env";
 import { bearer, HttpError } from "../http";
 
+/** USB Jetson fleet name. Millie is only the UI guide avatar — never a board. */
+export const CANONICAL_USB_BOARD = "Kratos";
+
 export type DeviceRow = {
   id: string;
   user_id: number;
@@ -30,13 +33,22 @@ export type DeviceView = {
 
 const iso = (sec: number | null) => (sec ? new Date(sec * 1000).toISOString() : null);
 
+/** Rename leftover Millie board labels to Kratos (guide ≠ board). */
+export function canonicalBoardName(name: string, hostname?: string | null): string {
+  const n = (name || "").trim();
+  const h = (hostname || "").trim().toLowerCase();
+  if (n.toLowerCase() === "millie" || h === "millie") return CANONICAL_USB_BOARD;
+  return n || CANONICAL_USB_BOARD;
+}
+
 export function deviceView(d: DeviceRow): DeviceView {
   const online = d.connected_at != null && (d.disconnected_at == null || d.connected_at > d.disconnected_at);
+  const name = canonicalBoardName(d.name, d.hostname);
   return {
     id: d.id,
-    name: d.name,
+    name,
     hostname: d.hostname || "",
-    agent_name: d.name || "board",
+    agent_name: name,
     kind: "jetson",
     status: online ? "online" : "offline",
     remote_enabled: Boolean(d.remote_enabled),
@@ -46,13 +58,28 @@ export function deviceView(d: DeviceRow): DeviceView {
   };
 }
 
+async function repairMillieNames(env: Env, rows: DeviceRow[]): Promise<DeviceRow[]> {
+  const out: DeviceRow[] = [];
+  for (const row of rows) {
+    const name = canonicalBoardName(row.name, row.hostname);
+    if (name !== row.name) {
+      await env.DB.prepare("UPDATE devices SET name = ?1 WHERE id = ?2").bind(name, row.id).run();
+      out.push({ ...row, name });
+    } else {
+      out.push(row);
+    }
+  }
+  return out;
+}
+
 export async function listDevices(env: Env, userId: number): Promise<DeviceView[]> {
   const { results } = await env.DB.prepare(
     "SELECT * FROM devices WHERE user_id = ?1 ORDER BY created_at"
   )
     .bind(userId)
     .all<DeviceRow>();
-  return results.map(deviceView);
+  const repaired = await repairMillieNames(env, results);
+  return repaired.map(deviceView);
 }
 
 /** The device, only if it belongs to this user. 404 otherwise, so ids don't leak. */
@@ -71,7 +98,8 @@ export async function updateDevice(
   patch: { name?: string; remote_enabled?: boolean }
 ): Promise<DeviceView> {
   const row = await ownedDevice(env, userId, deviceId);
-  const name = patch.name ?? row.name;
+  const raw = patch.name ?? row.name;
+  const name = canonicalBoardName(raw, row.hostname);
   const remote = patch.remote_enabled ?? Boolean(row.remote_enabled);
   await env.DB.prepare("UPDATE devices SET name = ?1, remote_enabled = ?2 WHERE id = ?3")
     .bind(name, remote ? 1 : 0, deviceId)
@@ -108,7 +136,14 @@ export async function markBoardHello(
   deviceId: string,
   info: { hostname: string | null; boardEmu: boolean }
 ): Promise<void> {
-  await env.DB.prepare("UPDATE devices SET hostname = COALESCE(?1, hostname), board_emu = ?2 WHERE id = ?3")
-    .bind(info.hostname, info.boardEmu ? 1 : 0, deviceId)
+  const row = await env.DB.prepare("SELECT name, hostname FROM devices WHERE id = ?1")
+    .bind(deviceId)
+    .first<{ name: string; hostname: string | null }>();
+  const host = info.hostname ?? row?.hostname ?? null;
+  const name = canonicalBoardName(row?.name || CANONICAL_USB_BOARD, host);
+  await env.DB.prepare(
+    "UPDATE devices SET hostname = COALESCE(?1, hostname), board_emu = ?2, name = ?3 WHERE id = ?4"
+  )
+    .bind(info.hostname, info.boardEmu ? 1 : 0, name, deviceId)
     .run();
 }

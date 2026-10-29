@@ -77,7 +77,7 @@ export default function DeskScreen() {
           <View style={styles.plate}>
             <Mark size={18} />
           </View>
-          <Text style={styles.brand}>NebiusDesk</Text>
+          <Text style={styles.brand}>Nebius Desk</Text>
         </View>
         <Pressable onPress={() => router.push("/machine")}>
           <Text style={styles.logout}>Machine</Text>
@@ -118,7 +118,7 @@ export default function DeskScreen() {
           multiline
           value={input}
           onChangeText={setInput}
-          placeholder="Message NebiusDesk…"
+          placeholder="Message Nebius Desk…"
         />
         <Pressable
           style={[styles.send, (!input.trim() || loading) && styles.disabled]}

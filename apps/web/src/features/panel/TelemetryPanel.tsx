@@ -9,7 +9,7 @@ import { RouterCard } from "@/features/panel/RouterCard";
 import { SessionCard } from "@/features/panel/SessionCard";
 import { SubscriptionCard } from "@/features/panel/SubscriptionCard";
 import { useModels } from "@/features/panel/useModels";
-import { IconX } from "@/ui/icons";
+import { IconPanelRight } from "@/ui/icons";
 import styles from "./Panel.module.css";
 
 type Props = {
@@ -50,10 +50,16 @@ export function TelemetryPanel({
   return (
     <aside className={styles.panel} aria-label="Telemetry">
       <header className={styles.panelHead}>
-        <PanelTabs active={tab} onChange={setTab} />
-        <button type="button" className={styles.close} onClick={onClose} aria-label="Hide telemetry panel">
-          <IconX size={14} />
+        <button
+          type="button"
+          className={styles.panelToggle}
+          onClick={onClose}
+          aria-label="Hide telemetry panel"
+          title="Telemetry (Ctrl .)"
+        >
+          <IconPanelRight size={16} />
         </button>
+        <PanelTabs active={tab} onChange={setTab} />
       </header>
       <div className={styles.cards} role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {device ? (

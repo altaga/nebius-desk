@@ -10,15 +10,33 @@
 .panelHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   height: 48px;
-  padding: 0 10px 0 16px;
+  padding: 0 12px 0 10px;
   border-bottom: 1px solid var(--line);
+}
+
+.panelToggle {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--ink-2);
+}
+
+.panelToggle:hover {
+  color: var(--ink);
+  background: var(--hover);
 }
 
 .tabs {
   display: flex;
   gap: 2px;
+  margin-left: auto;
 }
 
 .tabs button {

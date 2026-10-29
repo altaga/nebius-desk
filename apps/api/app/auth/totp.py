@@ -10,7 +10,7 @@ def generate_totp_secret() -> str:
     return pyotp.random_base32()
 
 
-def build_otpauth_url(username: str, secret: str, issuer: str = "NebiusDesk") -> str:
+def build_otpauth_url(username: str, secret: str, issuer: str = "Nebius Desk") -> str:
     return pyotp.TOTP(secret).provisioning_uri(name=username, issuer_name=issuer)
 
 

@@ -27,6 +27,13 @@ export const IconSearch = (p: P) => (
     <path d="M20 20l-4-4" />
   </Svg>
 );
+export const IconListCheck = (p: P) => (
+  <Svg {...p}>
+    <rect x="3.5" y="4.5" width="6" height="6" rx="1.5" />
+    <path d="M5 7.6l1.2 1.2L8.4 6.5M13 7.5h7.5M13 16.5h7.5" />
+    <rect x="3.5" y="13.5" width="6" height="6" rx="1.5" />
+  </Svg>
+);
 export const IconPlus = (p: P) => (
   <Svg {...p}>
     <path d="M12 5v14M5 12h14" />
@@ -90,6 +97,12 @@ export const IconRetry = (p: P) => (
 export const IconArrowUp = (p: P) => (
   <Svg {...p} strokeWidth={2}>
     <path d="M12 19V5M6 11l6-6 6 6" />
+  </Svg>
+);
+export const IconUpload = (p: P) => (
+  <Svg {...p}>
+    <path d="M12 16V5M8 9l4-4 4 4" />
+    <path d="M4 19h16" />
   </Svg>
 );
 export const IconMic = (p: P) => (

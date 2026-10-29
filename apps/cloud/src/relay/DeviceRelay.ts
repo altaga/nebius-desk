@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { markBoardHello, markPresence } from "../devices/service";
 import { Env, nowSec } from "../env";
 import { json } from "../http";
+import { recordOpsEvent } from "../ops/service";
 import {
   FromAgent,
   FromTerminal,
@@ -93,10 +94,21 @@ export class DeviceRelay extends DurableObject<Env> {
   }
 
   private async proxy(req: Request): Promise<Response> {
+    const t0 = Date.now();
+    const path = req.headers.get("x-path") || "/";
+    const user = JSON.parse(req.headers.get("x-user") || "{}") as RelayUser;
+    const deviceId = (await this.ctx.storage.get<string>("device_id")) || "";
+
     const agent = this.agent();
-    if (!agent) return json({ detail: { error: "board_offline" } }, 503);
+    if (!agent) {
+      await this.logRelayError("board_offline", path, deviceId, user, t0);
+      return json({ detail: { error: "board_offline" } }, 503);
+    }
     const raw = req.method === "GET" || req.method === "HEAD" ? null : await req.arrayBuffer();
-    if (raw && raw.byteLength > MAX_REQUEST_BODY) return json({ detail: { error: "body_too_large" } }, 413);
+    if (raw && raw.byteLength > MAX_REQUEST_BODY) {
+      await this.logRelayError("body_too_large", path, deviceId, user, t0);
+      return json({ detail: { error: "body_too_large" } }, 413);
+    }
 
     const id = crypto.randomUUID();
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
@@ -120,9 +132,9 @@ export class DeviceRelay extends DurableObject<Env> {
       t: "req",
       id,
       method: req.method,
-      path: req.headers.get("x-path") || "/",
+      path,
       headers: JSON.parse(req.headers.get("x-forward-headers") || "{}"),
-      user: JSON.parse(req.headers.get("x-user") || "{}"),
+      user,
       body: raw && raw.byteLength ? Buffer.from(raw).toString("base64") : undefined,
     });
     if (!sent) this.pending.get(id)?.fail("board_offline");
@@ -133,8 +145,32 @@ export class DeviceRelay extends DurableObject<Env> {
     } catch (err) {
       this.pending.delete(id);
       const reason = err instanceof Error ? err.message : "board_error";
+      await this.logRelayError(reason, path, deviceId, user, t0);
       return json({ detail: { error: reason } }, reason === "board_timeout" ? 504 : 502);
     }
+  }
+
+  private async logRelayError(
+    errorCode: string,
+    path: string,
+    deviceId: string,
+    user: RelayUser,
+    t0: number
+  ): Promise<void> {
+    // Skip noisy polls; keep chat/guide/shell/file link failures.
+    if (!/\/api\/(chat|guide|cli|files)\b/.test(path)) return;
+    await recordOpsEvent(this.env, {
+      kind: "relay",
+      status: "error",
+      error_code: errorCode,
+      user_id: typeof user.id === "number" ? user.id : null,
+      username: typeof user.username === "string" ? user.username : null,
+      device_id: deviceId || null,
+      path: path.slice(0, 200),
+      latency_ms: Date.now() - t0,
+      features: { hop: "relay" },
+      note: "board_link",
+    });
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
