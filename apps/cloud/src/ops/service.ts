@@ -55,9 +55,10 @@ export type OpsEventRow = {
   note: string | null;
 };
 
+/** Accounts that get the admin lens: the operator's bootstrap login. */
 export function isBootstrapAdmin(env: Env, username: string | null | undefined): boolean {
-  const admin = (env.BOOTSTRAP_USERNAME || "admin").trim().toLowerCase();
-  return Boolean(username && username.trim().toLowerCase() === admin);
+  const names = [env.BOOTSTRAP_USERNAME || "admin"].map((name) => name.trim().toLowerCase()).filter(Boolean);
+  return Boolean(username && names.includes(username.trim().toLowerCase()));
 }
 
 function clip(text: string | null | undefined, max = 4000): string | null {

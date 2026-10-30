@@ -28,10 +28,18 @@ export function findUser(env: Env, username: string): Promise<UserRow | null> {
   return env.DB.prepare("SELECT * FROM users WHERE username = ?1").bind(username).first<UserRow>();
 }
 
-/** The first login of the bootstrap account creates it from the deploy secret. */
-async function ensureBootstrapUser(env: Env, username: string): Promise<UserRow | null> {
-  if (username !== env.BOOTSTRAP_USERNAME || !env.BOOTSTRAP_PASSWORD) return null;
-  const hash = await hashPassword(env.BOOTSTRAP_PASSWORD);
+type Seed = { username?: string; password?: string };
+
+/** Deploy-seeded login for the operator bootstrap account. */
+function seeds(env: Env): Seed[] {
+  return [{ username: env.BOOTSTRAP_USERNAME, password: env.BOOTSTRAP_PASSWORD }];
+}
+
+/** A seeded account is created on first use from its deploy secret, on the `desk` plan. */
+async function ensureSeedUser(env: Env, username: string): Promise<UserRow | null> {
+  const seed = seeds(env).find((s) => s.username && s.username === username && s.password);
+  if (!seed?.password) return null;
+  const hash = await hashPassword(seed.password);
   await env.DB.prepare(
     "INSERT OR IGNORE INTO users (username, password_hash, totp_secret, totp_enabled, created_at) VALUES (?1, ?2, ?3, 0, ?4)"
   )
@@ -57,7 +65,7 @@ async function issueTokens(env: Env, user: Pick<UserRow, "id" | "username">): Pr
 }
 
 export async function login(env: Env, username: string, password: string, totpCode: string): Promise<Tokens> {
-  const user = (await findUser(env, username)) ?? (await ensureBootstrapUser(env, username));
+  const user = (await findUser(env, username)) ?? (await ensureSeedUser(env, username));
   if (!user || !(await verifyPassword(password, user.password_hash))) {
     throw new HttpError(401, "invalid_credentials");
   }

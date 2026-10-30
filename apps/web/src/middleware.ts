@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 const LOCAL = new Set(["localhost", "127.0.0.1"]);
+/** App paths served as-is: the login form, the desk, and pairing. */
+const PUBLIC = new Set(["/", "/login", "/dashboard", "/pair"]);
 
 function hostname(req: NextRequest) {
   return (req.headers.get("host") || "").split(":")[0].toLowerCase();
@@ -39,14 +41,14 @@ export function middleware(req: NextRequest) {
 
   // No custom domain yet: the public host serves the introduction and the desk.
   if (local || !site) {
-    if (pathname === "/" || pathname === "/login" || pathname === "/dashboard" || pathname === "/pair") {
+    if (PUBLIC.has(pathname)) {
       return NextResponse.next();
     }
     return redirect(req, "/");
   }
 
   if (onApp) {
-    if (pathname === "/login" || pathname === "/dashboard" || pathname === "/pair") return NextResponse.next();
+    if (PUBLIC.has(pathname)) return NextResponse.next();
     return redirect(req, pathname === "/" ? "/login" : "/dashboard");
   }
 

@@ -75,7 +75,8 @@ def api_list_sessions(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[SessionOut]:
-    return [_session_out(s) for s in list_sessions(db, user.id, device_id=_local_device_id(db, user, device_id))]
+    local_device_id = _local_device_id(db, user, device_id)
+    return [_session_out(s) for s in list_sessions(db, user.id, device_id=local_device_id)]
 
 
 @router.patch("/sessions/{session_id}", response_model=SessionOut)

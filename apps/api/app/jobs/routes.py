@@ -32,7 +32,7 @@ class EnqueueRequest(BaseModel):
 
 
 @router.get("")
-def api_list_jobs(
+async def api_list_jobs(
     limit: int = 40,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),

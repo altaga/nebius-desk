@@ -13,6 +13,10 @@ function reading(value: number | null | undefined, suffix: string) {
   return value == null ? "—" : `${Math.round(value)}${suffix}`;
 }
 
+function oneLine(parts: Array<string | null | undefined>) {
+  return parts.filter((part): part is string => Boolean(part && part.trim())).join(" · ") || "—";
+}
+
 export function DeviceCard({ deviceName }: Props) {
   const { data, error, loading } = usePolled(() => api().edgeStats(), 5000);
   const connected = !!data?.jetson_online;
@@ -63,10 +67,15 @@ function Identity({
         <p className={styles.sub}>{data.model ?? "Jetson"} · up {fmtUptime(data.uptime_sec)}</p>
       ) : null}
       {data && !connected ? (
-        <p className={styles.footnote}>
-          No Jetson is reporting to this desk. The API is running on {data.host}, which has no board sensors. Run
-          the desk on the Jetson and its temperature, CPU, GPU, memory, and disk appear here.
-        </p>
+        <>
+          <p className={styles.sub}>
+            {oneLine([data.runtime, data.cloud_provider, data.instance_type])} · up {fmtUptime(data.uptime_sec)}
+          </p>
+          <p className={styles.footnote}>
+            No Jetson is reporting to this desk. Showing the local machine on {data.host}
+            {data.local_ipv4 ? ` (${data.local_ipv4})` : ""} instead.
+          </p>
+        </>
       ) : null}
     </section>
   );

@@ -19,6 +19,10 @@ function num(value: number | null | undefined, suffix = "") {
   return value == null ? "—" : `${value}${suffix}`;
 }
 
+function oneLine(parts: Array<string | null | undefined>) {
+  return parts.filter((part): part is string => Boolean(part && part.trim())).join(" · ") || "—";
+}
+
 type Props = {
   device: DeviceRow;
   onRename: (name: string) => Promise<void>;
@@ -152,25 +156,32 @@ function HealthPane({
       : "—";
   const host = health?.hostname || health?.host || "—";
   const home = health?.home || health?.desk_root || "—";
-  if (health && !health.jetson_online) {
-    return (
-      <>
-        <p className={styles.note}>
-          No Jetson is reporting. The API is running on {host} as {health.os_user || "unknown"}, which has no board
-          sensors.
-        </p>
-      </>
-    );
-  }
+  const runtime = oneLine([health?.runtime, health?.cloud_provider, health?.instance_type]);
+  const machine = oneLine([health?.product_name, health?.product_version, health?.sys_vendor]);
+  const cpu = oneLine([health?.cpu_model, health?.cpu_cores != null ? `${health.cpu_cores} vCPU` : null]);
   return (
     <>
       {error ? <p className={styles.error}>{error}</p> : null}
       {!health && loading ? <p className={styles.note}>Reading sensors…</p> : null}
+      {health && !health.jetson_online ? (
+        <p className={styles.note}>
+          No Jetson is reporting. Showing the local machine running this desk on {host} as{" "}
+          {health.os_user || "unknown"} instead.
+        </p>
+      ) : null}
       <dl className={styles.grid}>
         <div><dt>Fleet</dt><dd>{fleetName}</dd></div>
         <div><dt>Hostname</dt><dd>{host}</dd></div>
         <div><dt>OS user</dt><dd>{health?.os_user || "—"}</dd></div>
         <div><dt>Home</dt><dd title={home}>{home}</dd></div>
+        <div><dt>Model</dt><dd>{health?.model || "—"}</dd></div>
+        <div><dt>Runtime</dt><dd>{runtime}</dd></div>
+        <div><dt>Machine</dt><dd title={machine}>{machine}</dd></div>
+        <div><dt>CPU model</dt><dd title={cpu}>{cpu}</dd></div>
+        <div><dt>Arch</dt><dd>{oneLine([health?.arch, health?.kernel])}</dd></div>
+        <div><dt>Local IP</dt><dd>{health?.local_ipv4 || "—"}</dd></div>
+        <div><dt>Zone</dt><dd>{health?.availability_zone || "—"}</dd></div>
+        <div><dt>Instance</dt><dd title={health?.instance_id || undefined}>{oneLine([health?.instance_type, health?.instance_id])}</dd></div>
         <div><dt>Temperature</dt><dd>{num(health?.temp_c, " °C")}</dd></div>
         <div><dt>CPU</dt><dd>{num(health?.cpu_pct, "%")}</dd></div>
         <div><dt>GPU</dt><dd>{num(health?.gpu_util_pct, "%")}</dd></div>

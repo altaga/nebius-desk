@@ -21,27 +21,100 @@ metered cloud credit. Cloudflare owns identity, fleet, and the Nebius/Tavily key
 ## Request path
 
 ```mermaid
-flowchart TB
-  Client["Phone / Browser"]
-  BFF["Next BFF (Vercel)<br/>/api/desk/*"]
-  Worker["Cloudflare Worker<br/>auth · pairing · gateway · relay"]
-  Relay["DeviceRelay<br/>(Durable Object)"]
-  Agent["board-agent<br/>outbound WebSocket"]
-  API["FastAPI on the board<br/>127.0.0.1:8000"]
-  Nebius["Nebius Token Factory"]
-  Tavily["Tavily"]
+flowchart LR
+  subgraph Surface["Operator surface"]
+    direction TB
+    Client["Browser"] --> BFF["Next BFF on Vercel"]
+  end
+  subgraph Cloud["Cloud plane"]
+    direction TB
+    Worker["Cloudflare Worker"]
+    Relay["DeviceRelay"]
+    Nebius["Nebius"]
+    Tavily["Tavily"]
+  end
+  subgraph Board["Board plane"]
+    direction TB
+    Agent["board-agent"] --> API["FastAPI on the board"]
+  end
 
-  Client --> BFF --> Worker
+  BFF --> Worker
   Worker --> Relay
-  Relay -->|WS| Agent
-  Agent --> API
-  API -->|"device token + HMAC"| Worker
   Worker --> Nebius
   Worker --> Tavily
+  Relay --> Agent
+  API -->|"device token + HMAC"| Worker
 ```
 
 The board never opens an inbound port. It dials **out** to `/v1/agent/connect`, and
 the relay proxies `/v1/devices/{id}/*` back down the same socket.
+
+## Nebius and Tavily call path
+
+This is the provider-specific path after a paired board is already online. The Jetson
+never talks to Nebius or Tavily directly with raw provider secrets. It talks to the
+desk cloud first, and the cloud gateway decides how to call each upstream.
+
+```mermaid
+flowchart LR
+  subgraph Board["Jetson / board-emu"]
+    direction LR
+    Chat["Chat turn in FastAPI"] --> Router["Hybrid router<br/>intent + selector + context"]
+    Tools["Desk tools<br/>search / install / browse / run ..."] --> Agent["board-agent"]
+  end
+
+  subgraph Cloud["Cloudflare"]
+    direction LR
+    Relay["DeviceRelay"] --> Gateway["Gateway routes<br/>metering + auth + key custody"] --> Guard["Budget / subscription / circuit breaker"]
+    Filter["Trusted-host filter<br/>install only"]
+  end
+
+  subgraph Providers["Upstream providers"]
+    direction LR
+    Nebius["Nebius Token Factory"]
+    Tavily["Tavily Search API"]
+  end
+
+  Router -->|local turn| Chat
+  Router -->|cloud model needed| Agent
+  Agent --> Relay
+  Guard -->|LLM request| Nebius
+  Guard -->|web search| Tavily
+  Tavily --> Filter
+  Filter --> Gateway
+  Nebius --> Gateway
+  Gateway --> Relay --> Agent
+  Agent --> Chat
+  Chat -->|tool results or final stream| Tools
+```
+
+End to end, one cloud-backed turn works like this:
+
+1. The Jetson receives the chat turn in `apps/api` and the hybrid router decides whether
+   it can stay local or needs cloud help.
+2. If it is a **Nebius** turn, the board sends the request through the outbound relay path:
+   `FastAPI -> board-agent -> DeviceRelay -> Cloudflare gateway`.
+3. The gateway authenticates the board with the `device_token`, optionally verifies the
+   HMAC signature, checks subscription and remaining credit, and only then calls Nebius.
+4. The **Nebius API key** is injected inside the Worker. It never reaches the Jetson,
+   browser, or mobile client.
+5. Nebius streams the model output back through the same chain:
+   `Nebius -> gateway -> relay -> board-agent -> FastAPI -> operator UI`.
+6. If the model asks for web context, a `search` or `install` tool call is emitted on the
+   board and sent through the same gateway path.
+7. For **Tavily**, the gateway applies caps and the circuit breaker, calls Tavily with the
+   Worker-held key, and returns normalized results to the board.
+8. For `install`, Tavily results are filtered down to trusted hosts before the board is
+   allowed to continue with the install recipe.
+9. The board feeds those Tavily results back into the model turn, and the final answer is
+   streamed to the operator with route and usage telemetry.
+
+The important split is:
+
+- **Jetson**: routing, local inference, compression, tool execution, final UX
+- **Cloudflare**: identity, relay, metering, provider key custody, gateway policy
+- **Nebius**: cloud reasoning
+- **Tavily**: fresh web context
 
 ## The model ladder
 
@@ -89,19 +162,26 @@ each turn is one warm spoken sentence plus exactly one `guide` JSON fence of act
 ## Auth, pairing, security
 
 ```mermaid
-flowchart TB
-  subgraph CF["Cloudflare"]
-    Accounts["Accounts (PBKDF2)"]
-    D1[("D1: fleet · balances · ledger")]
-    Keys["Nebius + Tavily keys"]
+flowchart LR
+  subgraph Access["Access"]
+    direction TB
+    Browser["Browser"] --> Auth["Cloudflare auth"]
+    Board["Board"] --> Pair["Claim code pairing"]
   end
-  Board["Board"]
-  Browser["Browser"]
+  subgraph Secrets["Issued credentials"]
+    direction TB
+    JWT["JWT cookie"]
+    Device["Device token"]
+  end
+  subgraph Keys["Worker-only secrets"]
+    direction TB
+    Vault["Nebius + Tavily keys"]
+  end
 
-  Browser -->|"httpOnly JWT cookie"| CF
-  Board -->|"claim code, then device token"| CF
-  CF -->|"one-time delivery"| Board
-  Keys -.->|"never leave the Worker"| CF
+  Auth --> JWT
+  Pair --> Device
+  Vault -.-> Auth
+  Vault -.-> Pair
 ```
 
 - **Product login** = Cloudflare (short-lived JWT + refresh, optional TOTP). Web uses

@@ -55,26 +55,177 @@ when it can't, and **shrinks the prompt** before paid tokens ever leave the boar
 GPU you already own becomes the cost control plane.
 
 ```mermaid
-flowchart TB
-  Msg["Your message"]
-  Rules["Rules + local Qwen selector<br/>(picks the cheapest capable tier)"]
-  Short["Short / light?"]
-  Ollama["Ollama on the Jetson GPU<br/>qwen2.5:1.5b — free"]
-  Compress["Long history?<br/>local Qwen compresses it"]
-  Nebius["Nebius Token Factory<br/>Nemotron nano / fast / heavy"]
-  Stream["Stream the answer + record savings"]
+flowchart LR
+  subgraph Input["On the board"]
+    direction TB
+    Msg["Your message"] --> Decide["Board router<br/>rules + local selector"]
+  end
+  subgraph Paths["Cheapest capable path"]
+    direction TB
+    Local["Local Ollama<br/>Qwen on Jetson"]
+    Cloud["Cloud route<br/>compress + Nebius"]
+  end
+  subgraph Finish["Result"]
+    direction TB
+    Stream["Answer + savings"]
+  end
 
-  Msg --> Rules --> Short
-  Short -->|yes| Ollama
-  Short -->|no| Compress --> Nebius
-  Ollama --> Stream
-  Nebius --> Stream
+  Decide --> Local
+  Decide --> Cloud
+  Local --> Stream
+  Cloud --> Stream
 ```
 
 Leave it on `Auto` and the router decides per turn — or pin a tier by hand from the model
 picker in the composer:
 
 <img src="./docs/screenshots/model-picker.png" width="760" alt="Choosing a routing tier from the model picker" />
+
+## How Routing And Tavily Actually Work
+
+The desk does not blindly send every turn to one big cloud model. Routing is a staged
+decision that starts on the board, uses cheap rules first, and only spends cloud tokens
+when the request justifies it.
+
+```mermaid
+flowchart LR
+  subgraph Pick["Pick the route"]
+    direction TB
+    Msg["User message"] --> Manual["Manual pick or Auto"]
+    Manual --> Rules["Rules"]
+    Rules --> Selector["Borderline?<br/>ask local Qwen"]
+  end
+  subgraph Route["Apply board constraints"]
+    direction TB
+    Override["Mode + board checks<br/>hybrid / local_only / cloud_only / board-emu"]
+    Local["Local<br/>Ollama"]
+    Cloud["Cloud<br/>Nebius tier"]
+  end
+  subgraph Execute["Run the turn"]
+    direction TB
+    Tools["Optional tools"]
+    Answer["Final answer + route telemetry"]
+  end
+
+  Selector --> Override
+  Override --> Local
+  Override --> Cloud
+  Local --> Tools
+  Cloud --> Tools
+  Tools --> Answer
+```
+
+In plain English:
+
+- `manual` wins first: if you pin a tier in the composer, the router respects it.
+- `rules` handle the cheap obvious cases first:
+  - greetings, tiny rewrites, typos, translation, short formatting -> `local`
+  - normal questions and coding help -> `fast`
+  - architecture, hard debugging, long plans, expensive-to-be-wrong tasks -> `heavy`
+- `jetson selector` only wakes up for borderline requests. It asks the local Qwen model
+  for the cheapest tier that can still answer well.
+- `overrides` then apply product constraints:
+  - on `board-emu`, `Auto` and `local` are remapped to cloud `nano`
+  - `local_only` never opens Nebius
+  - `cloud_only` bumps local requests to cloud
+- `compression` happens only on cloud routes: older history is shrunk on the Jetson before
+  paid tokens leave the board.
+- `budget checks` run before Nebius: inactive subscription or exhausted cloud credit falls
+  back to local when possible.
+
+### Tool Selection
+
+The model does not call internal functions directly. It asks for work by emitting fenced
+blocks such as `run`, `read`, `list`, `browse`, `search`, or `job`, and the desk executes
+those blocks on the board after applying approval and safety rules.
+
+```mermaid
+flowchart LR
+  subgraph Ask["Ask"]
+    direction TB
+    User["User asks for work"] --> Model["Model reply"]
+  end
+  subgraph Act["Act"]
+    direction TB
+    Parse["Parse fenced tools"]
+    Guard["Approval + safety gates"]
+    Exec["Run on the board"]
+  end
+  subgraph Return["Return"]
+    direction TB
+    Results["Tool results"]
+    Final["Final answer"]
+  end
+
+  Model --> Parse
+  Parse --> Guard
+  Guard --> Exec
+  Exec --> Results
+  Results --> Final
+```
+
+That is how the agent decides which tool to use:
+
+- shell or machine inspection -> `run`, `health`, `probe`, `verify`, `checks`
+- filesystem work -> `read`, `list`, `patch`
+- browser work -> `browse`, `record`, `render`
+- background work that should survive the tab -> `job`
+- web research or trusted install lookups -> `search`
+
+### Tavily: where it is used
+
+Tavily is the desk's web-search tool, not the main reasoning model. It is called when the
+agent needs fresh web results, and it is especially important in two paths:
+
+1. `search` fences
+2. `install` fences, where the desk re-searches the package/tool before running anything
+
+```mermaid
+flowchart LR
+  subgraph Trigger["When Tavily is used"]
+    direction TB
+    Need["Need fresh web context"]
+    Search["search fence"]
+    Install["install fence"]
+  end
+  subgraph Fetch["Gateway path"]
+    direction TB
+    Gateway["Cloudflare gateway"]
+    Tavily["Tavily<br/>cap + breaker"]
+    Results["Results to the board"]
+  end
+  subgraph Use["How results are used"]
+    direction TB
+    Model["Model continues"]
+    Filter["Trusted-host filter<br/>for installs"]
+  end
+
+  Need --> Search
+  Need --> Install
+  Search --> Gateway
+  Install --> Gateway
+  Gateway --> Tavily
+  Tavily --> Results
+  Results --> Model
+  Results --> Filter
+  Filter --> Model
+```
+
+Important Tavily behavior:
+
+- paired boards usually call Tavily through the Cloudflare gateway, so the key never leaves
+  the Worker
+- without a configured key, Tavily returns a mock result instead of breaking the flow
+- searches are capped with credits; hitting the cap returns a clear error
+- repeated upstream failures open a circuit breaker and fall back to a soft mock
+- `install` is stricter than `search`: it uses Tavily results to keep only trusted hosts
+  such as official registries and vendor docs, and refuses suspicious install paths
+
+So the split is:
+
+- **Nebius** answers and reasons
+- **Tavily** fetches fresh web context
+- **the Jetson** decides when either one is worth using
 
 ## Why a physical Jetson is the product
 
@@ -148,21 +299,29 @@ in a lab does.
 ## Architecture
 
 ```mermaid
-flowchart TB
-  Client["Phone / Browser"]
-  BFF["Next BFF on Vercel<br/>/api/desk/*"]
-  Worker["Cloudflare Worker<br/>auth · pairing · gateway · relay"]
-  Relay["DeviceRelay (Durable Object)"]
-  Agent["board-agent<br/>outbound WebSocket"]
-  API["FastAPI on the board<br/>127.0.0.1:8000"]
-  Nebius["Nebius Token Factory"]
-  Tavily["Tavily"]
+flowchart LR
+  subgraph Surface["Operator surface"]
+    direction TB
+    Client["Browser"] --> BFF["Next BFF on Vercel"]
+  end
+  subgraph Cloud["Cloud plane"]
+    direction TB
+    Worker["Cloudflare Worker"]
+    Relay["DeviceRelay"]
+    Nebius["Nebius"]
+    Tavily["Tavily"]
+  end
+  subgraph Board["Board plane"]
+    direction TB
+    Agent["board-agent"] --> API["FastAPI on the board"]
+  end
 
-  Client --> BFF --> Worker --> Relay
-  Relay -->|WS| Agent --> API
-  API -->|device token + HMAC| Worker
+  BFF --> Worker
+  Worker --> Relay
   Worker --> Nebius
   Worker --> Tavily
+  Relay --> Agent
+  API -->|"device token + HMAC"| Worker
 ```
 
 Six apps, one repo:
@@ -179,11 +338,26 @@ Six apps, one repo:
 ## Security model
 
 ```mermaid
-flowchart TB
-  Browser["Browser"] -->|httpOnly JWT cookie| CF["Cloudflare"]
-  Board["Board"] -->|claim code → device token| CF
-  CF -->|one-time delivery| Board
-  CF -.->|"Nebius + Tavily keys never leave"| CF
+flowchart LR
+  subgraph Access["Access"]
+    direction TB
+    Browser["Browser"] --> Auth["Cloudflare auth"]
+    Board["Board"] --> Pair["Claim code pairing"]
+  end
+  subgraph Secrets["Issued credentials"]
+    direction TB
+    JWT["JWT cookie"]
+    Device["Device token"]
+  end
+  subgraph Keys["Worker-only secrets"]
+    direction TB
+    Vault["Nebius + Tavily keys"]
+  end
+
+  Auth --> JWT
+  Pair --> Device
+  Vault -.-> Auth
+  Vault -.-> Pair
 ```
 
 - Product login is Cloudflare-issued (short-lived JWT + refresh, optional TOTP). The

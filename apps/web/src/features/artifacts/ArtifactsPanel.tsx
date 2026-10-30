@@ -99,7 +99,7 @@ export function ArtifactsPanel() {
           <h3>Artifact scratchpad</h3>
           <p className={styles.muted}>
             Live Mermaid / code artifacts land here next. For now this panel hosts the
-            Jetson monitor judges will see in the demo video.
+            Jetson monitor reviewers will see in the demo video.
           </p>
         </div>
       )}

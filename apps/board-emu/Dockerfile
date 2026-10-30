@@ -36,7 +36,8 @@ COPY api/app /opt/api/app
 COPY board-agent/desk_agent.py /opt/agent/desk_agent.py
 COPY board-emu/entrypoint.sh /entrypoint.sh
 
-RUN chmod +x /entrypoint.sh \
+RUN sed -i 's/\r$//' /entrypoint.sh \
+ && chmod +x /entrypoint.sh \
  && mkdir -p /home/jetson/.config/nebius-desk /home/jetson/data \
  && printf '%s\n' \
       '# Cloud board workspace' \
